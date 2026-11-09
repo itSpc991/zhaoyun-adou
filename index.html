@@ -61,7 +61,7 @@
       <button id="btnRestart">🔄 重开</button>
       <button id="btnTrash" title="把兵拖到这里卖掉">🗑️</button>
     </div>
-    <div id="hint">按住碎片/棋子拖动：拖上棋盘放置，拖到相同兵种上合成，拖到 🗑️ 卖兵；预览会悬在手指上方，落点格子会高亮</div>
+    <div id="hint">按住拖动：拖上棋盘放置，拖到相同兵种合成，拖回下方手牌收回，拖到 🗑️ 卖兵；棋子中心指哪落哪，落点格高亮</div>
   </div>
 </div>
 <div id="ghost"></div>
@@ -213,32 +213,53 @@ cv.addEventListener('pointerdown', e => {
   const px = e.clientX - rect.left, py = e.clientY - rect.top;
   const cell = cellAt(px, py);
   if (cell && G.grid[cell.r][cell.c]) {
-    boardDrag = { r: cell.r, c: cell.c, u: G.grid[cell.r][cell.c], startX: px, startY: py };
+    const cc = cellCenter(cell.r, cell.c);
+    boardDrag = { r: cell.r, c: cell.c, u: G.grid[cell.r][cell.c],
+                  grabDX: px - cc.x, grabDY: py - cc.y, startX: px, startY: py };
     G.grid[cell.r][cell.c] = null;              // 拿起
-    dragXY = { x: px, y: py };
+    dragXY = { x: cc.x, y: cc.y };              // 棋子中心从原位出发，之后完全跟手
     trashBtn.classList.add('hot');
   }
 });
 cv.addEventListener('pointermove', e => {
   if (!boardDrag) return;
   const rect = cv.getBoundingClientRect();
-  dragXY = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  dropCell = nearestCell(dragXY.x, dragXY.y - 30);   // 落点高亮跟随预览（手指上方30px）
+  dragXY = { x: e.clientX - rect.left - boardDrag.grabDX, y: e.clientY - rect.top - boardDrag.grabDY };   // 棋子中心跟手（中心 = 手指 - 抓取偏移）
+  dropCell = nearestCell(dragXY.x, dragXY.y);
 });
 cv.addEventListener('pointerup', e => {
   if (!boardDrag) return;
-  const bd = boardDrag; boardDrag = null; dropCell = null;
-  trashBtn.classList.remove('hot');
-  const u = bd.u; if (!u) return;
-  const px = e.clientX - cv.getBoundingClientRect().left, py = e.clientY - cv.getBoundingClientRect().top;
+  const bd = boardDrag; boardDrag = null;
+  const u = bd.u; if (!u) { dropCell = null; trashBtn.classList.remove('hot'); return; }
+  const gx = e.clientX - bd.grabDX, gy = e.clientY - bd.grabDY;   // 松手时棋子中心（页面坐标）
+  const px = gx - cv.getBoundingClientRect().left, py = gy - cv.getBoundingClientRect().top;
   const dist = Math.hypot(px - bd.startX, py - bd.startY);
-  if (inTrash(e.clientX, e.clientY)) {            // 卖兵
+  if (inTrash(gx, gy)) {            // 卖兵
     G.mt += sellValue(u);
     showMsg('卖出 +' + sellValue(u) + ' 🍚'); updateTop();
+    dropCell = null; trashBtn.classList.remove('hot');
     return;
   }
-  if (dist <= TAP_SLOP) { G.grid[bd.r][bd.c] = u; return; }   // 只是点了一下：放回原格
-  const tgt = nearestCell(px, py - 30);           // 落点 = 预览所在格
+  const handIdx = handSlotAt(gx, gy);
+  if (handIdx >= 0) {                             // 拖回征兵栏：收回手牌（同种直接合成）
+    const j = G.hand.findIndex(h => h && canMerge(u, h));
+    if (j >= 0) {
+      G.hand[j] = mergeInto(G.hand[j]);
+      showMsg('收回并合成！' + unitName(G.hand[j]));
+    } else if (G.hand.length < 5) {
+      G.hand.push({ line: u.line, lv: u.lv, star: u.star });
+      showMsg('收回手牌');
+    } else {
+      G.grid[bd.r][bd.c] = u;                     // 手牌满：弹回原格
+      showMsg('手牌满了');
+    }
+    dropCell = null; trashBtn.classList.remove('hot');
+    renderHand();
+    return;
+  }
+  if (dist <= TAP_SLOP) { G.grid[bd.r][bd.c] = u; dropCell = null; trashBtn.classList.remove('hot'); return; }   // 只是点了一下：放回原格
+  const tgt = pickDrop(px, py, dropCell);         // 粘性落点：优先采信刚才高亮的格子
+  dropCell = null; trashBtn.classList.remove('hot');
   if (!tgt || (tgt.r === bd.r && tgt.c === bd.c)) { G.grid[bd.r][bd.c] = u; return; }   // 放回
   const b = G.grid[tgt.r][tgt.c];
   if (b && canMerge(u, b)) {                      // 合成
@@ -250,6 +271,14 @@ cv.addEventListener('pointerup', e => {
     G.grid[tgt.r][tgt.c] = u; G.grid[bd.r][bd.c] = b;
   }
 });
+// 粘性落点：松手点在格界附近抖动时，优先采信拖动中最后高亮的格子，防止"看着高亮却掉到下一行"
+function pickDrop(px, py, lastCell) {
+  const cand = nearestCell(px, py);
+  if (!lastCell) return cand;
+  if (!cand) return lastCell;
+  const c1 = cellCenter(lastCell.r, lastCell.c), c2 = cellCenter(cand.r, cand.c);
+  return Math.hypot(px - c1.x, py - c1.y) <= Math.hypot(px - c2.x, py - c2.y) ? lastCell : cand;
+}
 cv.addEventListener('pointercancel', () => {
   if (boardDrag) { G.grid[boardDrag.r][boardDrag.c] = boardDrag.u; boardDrag = null; }
   dropCell = null; dragXY = null; trashBtn.classList.remove('hot');
@@ -279,9 +308,9 @@ function ghostSetup(u) {
   ghostEl.style.display = 'flex';
   trashBtn.classList.add('hot');
 }
-function ghostMove(x, y) { ghostEl.style.left = (x - 23) + 'px'; ghostEl.style.top = (y - 53) + 'px'; }   // 预览显示在手指上方30px
+function ghostMove(x, y) { ghostEl.style.left = (x - 23) + 'px'; ghostEl.style.top = (y - 23) + 'px'; }   // (x,y) = 碎片中心
 function ghostHide() { ghostEl.style.display = 'none'; trashBtn.classList.remove('hot'); }
-function inTrash(x, y) { const r = trashBtn.getBoundingClientRect(); return x >= r.left-10 && x <= r.right+10 && y >= r.top-10 && y <= r.bottom+10; }
+function inTrash(x, y) { const r = trashBtn.getBoundingClientRect(); return x >= r.left-20 && x <= r.right+20 && y >= r.top-20 && y <= r.bottom+20; }
 function handSlotAt(x, y) {
   for (let i = 0; i < handEl.children.length; i++) {
     const r = handEl.children[i].getBoundingClientRect();
@@ -294,24 +323,27 @@ handEl.addEventListener('pointerdown', e => {
   const slot = e.target.closest('.slot'); if (!slot) return;
   const idx = Array.prototype.indexOf.call(handEl.children, slot);
   if (!G.hand[idx]) return;
-  handDrag = { idx, startX: e.clientX, startY: e.clientY };
+  const sr = slot.getBoundingClientRect();
+  handDrag = { idx, grabDX: e.clientX - (sr.left+sr.right)/2, grabDY: e.clientY - (sr.top+sr.bottom)/2, startX: e.clientX, startY: e.clientY };
   try { slot.setPointerCapture(e.pointerId); } catch (_) {}
-  ghostSetup(G.hand[idx]); ghostMove(e.clientX, e.clientY);
+  ghostSetup(G.hand[idx]); ghostMove(e.clientX - handDrag.grabDX, e.clientY - handDrag.grabDY);
 });
 // 监听挂在 document 上：拖到棋盘/垃圾桶/另一张手牌都能收到
 document.addEventListener('pointermove', e => {
   if (!handDrag) return;
-  ghostMove(e.clientX, e.clientY);
+  ghostMove(e.clientX - handDrag.grabDX, e.clientY - handDrag.grabDY);   // 碎片中心跟手（保持抓取偏移）
   const rect = cv.getBoundingClientRect();
-  dropCell = nearestCell(e.clientX - rect.left, e.clientY - rect.top - 30);
+  dropCell = nearestCell(e.clientX - handDrag.grabDX - rect.left, e.clientY - handDrag.grabDY - rect.top);
 }, { passive: false });
 document.addEventListener('pointerup', e => {
   if (!handDrag) return;
-  const hd = handDrag; handDrag = null; dropCell = null;
+  const hd = handDrag; handDrag = null;
+  const lastCell = dropCell; dropCell = null;
   const u = G.hand[hd.idx];
   if (!u) { ghostHide(); renderHand(); return; }
+  const gx = e.clientX - hd.grabDX, gy = e.clientY - hd.grabDY;   // 松手时碎片中心（页面坐标）
   const dist = Math.hypot(e.clientX - hd.startX, e.clientY - hd.startY);
-  if (dist > 10 && inTrash(e.clientX, e.clientY)) {           // 拖到垃圾桶 = 卖兵
+  if (dist > 10 && inTrash(gx, gy)) {                         // 拖到垃圾桶 = 卖兵
     G.hand.splice(hd.idx, 1);
     G.mt += sellValue(u);
     showMsg('卖出 +' + sellValue(u) + ' 🍚');
@@ -319,13 +351,13 @@ document.addEventListener('pointerup', e => {
   }
   if (dist <= 10) { ghostHide(); return; }                    // 没动：无操作
   const rect = cv.getBoundingClientRect();
-  const cell = nearestCell(e.clientX - rect.left, e.clientY - rect.top - 30);
+  const cell = pickDrop(gx - rect.left, gy - rect.top, lastCell);
   if (cell) {                                                 // 放上棋盘：放置或合成
     if (placeUnit(cell, u)) G.hand.splice(hd.idx, 1);
     else showMsg('这里放不下：放到空格或同种同级上');
     ghostHide(); renderHand(); return;
   }
-  const j = handSlotAt(e.clientX, e.clientY);
+  const j = handSlotAt(gx, gy);
   if (j >= 0 && j !== hd.idx && canMerge(u, G.hand[j])) {     // 拖到同种碎片上 = 手牌内合成
     G.hand[j] = mergeInto(G.hand[j]);
     G.hand.splice(hd.idx, 1);
@@ -466,13 +498,13 @@ function draw() {
     });
     ctx.lineWidth = 1;
   }
-  // 拖动中的棋子（从棋盘拿起）
+  // 拖动中的棋子（从棋盘拿起，中心跟手）
   if (boardDrag && dragXY && boardDrag.u) {
     const L = LINES[boardDrag.u.line];
-    ctx.globalAlpha = 0.85; ctx.fillStyle = L.color; roundRect(dragXY.x-24, dragXY.y-54, 48, 48, 9); ctx.fill();
+    ctx.globalAlpha = 0.85; ctx.fillStyle = L.color; roundRect(dragXY.x-24, dragXY.y-24, 48, 48, 9); ctx.fill();
     ctx.fillStyle = '#1c160c'; ctx.font = '900 20px "PingFang SC","Microsoft YaHei",sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(L.tiers[boardDrag.u.lv-1], dragXY.x, dragXY.y - 30);
+    ctx.fillText(L.tiers[boardDrag.u.lv-1], dragXY.x, dragXY.y);
     ctx.globalAlpha = 1;
   }
   // 波次提示
