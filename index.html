@@ -73,10 +73,10 @@ const MAX_WAVE = 15;
 const PULL_BASE = 10, PULL_STEP = 5;
 const MT_RATE = 2.2;           // 每秒馒头产出
 const ENEMY_TYPES = {
-  bing:  { ch:'曹', color:'#c0392b', hp:30,  spd:13, bounty:3, dmg:1 },
-  qi:    { ch:'骑', color:'#d35400', hp:22,  spd:22, bounty:4, dmg:1 },
-  dun:   { ch:'盾', color:'#7f5a3c', hp:70,  spd:9,  bounty:5, dmg:1 },
-  boss:  { ch:'吕', color:'#8e44ad', hp:400, spd:7,  bounty:30, dmg:3 },
+  bing:  { ch:'史', color:'#c0392b', hp:30,  spd:13, bounty:3, dmg:1 },
+  qi:    { ch:'鹏', color:'#d35400', hp:22,  spd:22, bounty:4, dmg:1 },
+  dun:   { ch:'程', color:'#7f5a3c', hp:70,  spd:9,  bounty:5, dmg:1 },
+  boss:  { ch:'sbc', color:'#8e44ad', hp:400, spd:7,  bounty:30, dmg:3 },
 };
 const ROWS = 5, COLS = 4;
 
@@ -327,7 +327,7 @@ function draw() {
     const size = e.type === 'boss' ? cellW*0.5 : cellW*0.38;
     ctx.beginPath(); ctx.arc(e.x, y, size/2 + 2, 0, 7);
     ctx.fillStyle = e.flash > 0 ? '#ffffff' : d.color; ctx.fill();
-    ctx.font = '900 ' + Math.floor(size*0.62) + 'px sans-serif';
+    ctx.font = '900 ' + Math.floor(size*0.62 / Math.max(1, d.ch.length*0.75)) + 'px sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = '#fff'; ctx.fillText(d.ch, e.x, y + 1);
     // 血条
