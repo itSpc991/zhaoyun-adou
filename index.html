@@ -76,7 +76,7 @@ const ENEMY_TYPES = {
   bing:  { ch:'炮灰小史', color:'#c0392b', hp:30,  spd:13, bounty:3, dmg:1 },
   qi:    { ch:'骁骑兵小史', color:'#d35400', hp:22,  spd:22, bounty:4, dmg:1 },
   dun:   { ch:'盾牌兵小史', color:'#7f5a3c', hp:70,  spd:9,  bounty:5, dmg:1 },
-  boss:  { ch:'邪恶大boos\n史鹏程', color:'#8e44ad', hp:400, spd:7,  bounty:30, dmg:3 },
+  boss:  { ch:'大boos小史', color:'#8e44ad', hp:400, spd:7,  bounty:30, dmg:3 },
 };
 const ROWS = 5, COLS = 4;
 
@@ -150,7 +150,7 @@ function doPull() {
   const lines = Object.keys(LINES);
   const line = lines[Math.floor(Math.random() * lines.length)];
   G.hand.push({ line, lv: 1 });
-  G.selHand = G.hand.length - 1;
+  G.selHand = -1;   // 不自动选中，由玩家自己点选
   renderHand(); updateTop();
 }
 function renderHand() {
