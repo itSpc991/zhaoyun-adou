@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>赵云与阿斗 · 网页复刻版</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+  html, body { margin: 0; padding: 0; background: #17140f; color: #e8dcc0; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; }
+  #wrap { max-width: 480px; margin: 0 auto; height: 100dvh; display: flex; flex-direction: column; }
+  /* 顶栏 */
+  #top { display: flex; align-items: center; gap: 6px; padding: 8px 10px 4px; font-size: 13px; flex-shrink: 0; }
+  .pill { background: #2a2418; border: 1px solid #4a3f2a; border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+  #mantou { color: #ffd76e; font-weight: 700; }
+  #hp { color: #ff8a7a; }
+  #wavePill { margin-left: auto; }
+  #speed { margin-left: 6px; }
+  /* 战场 */
+  #field { flex: 1; position: relative; min-height: 0; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+  /* 底栏 */
+  #bottom { flex-shrink: 0; padding: 6px 10px calc(10px + env(safe-area-inset-bottom)); background: #1e1912; border-top: 1px solid #3a3122; }
+  #hand { display: flex; gap: 6px; margin-bottom: 8px; }
+  .slot { flex: 1; aspect-ratio: 1/1; max-width: 64px; background: #2a2418; border: 2px solid #4a3f2a; border-radius: 10px;
+          display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 800; color: #e8dcc0; position: relative; }
+  .slot.sel { border-color: #ffd76e; box-shadow: 0 0 8px #ffd76e66; background: #3a3118; }
+  .slot .lv { position: absolute; right: 3px; bottom: 1px; font-size: 10px; color: #c9b98a; }
+  #btnRow { display: flex; gap: 8px; }
+  button { border: none; border-radius: 12px; font-size: 16px; font-weight: 800; cursor: pointer; color: #221c10; }
+  #btnPull { flex: 2; padding: 14px 0; background: #ffd76e; }
+  #btnPull:disabled { background: #5a5240; color: #8a8270; }
+  #btnRestart { flex: 1; padding: 14px 0; background: #3a3122; color: #e8dcc0; }
+  #hint { font-size: 12px; color: #8a7f65; margin-top: 6px; text-align: center; }
+  /* 面板 */
+  #panel { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); align-items: center; justify-content: center; z-index: 10; }
+  #panel .box { background: #241f15; border: 1px solid #5a4d30; border-radius: 16px; padding: 28px 34px; text-align: center; max-width: 320px; }
+  #panel .title { font-size: 22px; font-weight: 900; margin-bottom: 10px; }
+  #panel .desc { font-size: 14px; color: #c9b98a; line-height: 1.8; margin-bottom: 16px; }
+  #panel button { padding: 12px 30px; margin: 4px; background: #ffd76e; }
+  #panel button.gray { background: #3a3122; color: #e8dcc0; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="top">
+    <div class="pill" id="mantou">🍚 0</div>
+    <div class="pill" id="hp">斗 ❤❤❤❤❤</div>
+    <div class="pill" id="wavePill">第 1/15 波</div>
+    <button class="pill" id="speed" style="font-size:12px;">⏩x1</button>
+  </div>
+  <div id="field"><canvas id="cv"></canvas></div>
+  <div id="bottom">
+    <div id="hand"></div>
+    <div id="btnRow">
+      <button id="btnPull">🍚 征兵 (10)</button>
+      <button id="btnRestart">🔄 重开</button>
+    </div>
+    <div id="hint">点「征兵」拿文字碎片 → 点碎片再点棋盘放置；点住上拖到相同的兵可合成</div>
+  </div>
+</div>
+<div id="panel"><div class="box"><div class="title" id="pTitle"></div><div class="desc" id="pDesc"></div><div id="pBtns"></div></div></div>
+
+<script>
+'use strict';
+// ============ 配置 ============
+const LINES = {
+  zu:  { name:'卒线', tiers:['卒','兵','校尉','关羽'], color:'#e07a5f', atk:[8,16,32,70],   rate:[0.9,0.8,0.8,1.3],  kind:'melee', range:[0.9,0.9,1.6,1.8], aoe:[0,0,0.7,1.2] },
+  gong:{ name:'弓线', tiers:['弓','箭','连弩','黄忠'], color:'#7fb069', atk:[4,8,11,24],    rate:[1.0,0.9,0.55,0.8], kind:'ranged', range:[99,99,99,99], aoe:[0,0,0,0] },
+  ji:  { name:'戟线', tiers:['戟','枪','铁骑','赵云'], color:'#6ea8dc', atk:[6,12,24,42],   rate:[1.2,1.0,0.9,0.7],  kind:'pierce', range:[2.2,2.6,99,99], aoe:[0,0,0,0] },
+};
+const WUJIANG_LV = 4;
+const MAX_WAVE = 15;
+const PULL_BASE = 10, PULL_STEP = 5;
+const MT_RATE = 2.2;           // 每秒馒头产出
+const ENEMY_TYPES = {
+  bing:  { ch:'曹', color:'#c0392b', hp:30,  spd:13, bounty:3, dmg:1 },
+  qi:    { ch:'骑', color:'#d35400', hp:22,  spd:22, bounty:4, dmg:1 },
+  dun:   { ch:'盾', color:'#7f5a3c', hp:70,  spd:9,  bounty:5, dmg:1 },
+  boss:  { ch:'吕', color:'#8e44ad', hp:400, spd:7,  bounty:30, dmg:3 },
+};
+const ROWS = 5, COLS = 4;
+
+// ============ 状态 ============
+let G = null;
+function newGame() {
+  G = {
+    mt: 30, pullCost: PULL_BASE, wave: 0, waveActive: false, spawnQueue: [], spawnT: 0,
+    interT: 3, grid: Array.from({length:ROWS}, () => Array(COLS).fill(null)),
+    enemies: [], hp: 5, kills: 0, hand: [], selHand: -1, selCell: null,
+    over: false, won: false, speed: 1, endless: false, t: 0, msg: null, msgT: 0,
+  };
+  renderHand(); updateTop(); hidePanel();
+  window.G = G;
+}
+
+// ============ 画布 ============
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+let W = 0, H = 0, cellW = 0, cellH = 0, gridX = 0, gridY = 0, adouX = 0;
+function layout() {
+  const r = cv.parentElement.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = r.width * dpr; cv.height = r.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  W = r.width; H = r.height;
+  const pad = 8, adouW = 52;
+  cellW = (W - pad*2 - adouW) / COLS;
+  cellH = Math.min(cellW, (H - pad*2) / ROWS);
+  gridX = pad + (W - pad*2 - adouW - cellW*COLS) / 2;
+  gridY = pad + (H - pad*2 - cellH*ROWS) / 2;
+  adouX = gridX + cellW*COLS + adouW/2;
+}
+window.addEventListener('resize', layout);
+
+// ============ 敌人 ============
+function waveComp(n) {
+  const list = [];
+  const count = 3 + Math.round(n * 1.6);
+  const hpMul = 1 + (n-1) * 0.38;
+  for (let i = 0; i < count; i++) {
+    let t = 'bing';
+    const r = Math.random();
+    if (n >= 3 && r < 0.3) t = 'qi';
+    if (n >= 4 && r >= 0.3 && r < 0.5) t = 'dun';
+    list.push({ type: t, hpMul });
+  }
+  if (n % 5 === 0) list.push({ type: 'boss', hpMul: 1 + (n-1) * 0.3 });
+  return list;
+}
+function startWave() {
+  G.wave++; G.waveActive = true; G.spawnQueue = waveComp(G.wave); G.spawnT = 0.8;
+  updateTop();
+  showMsg(G.wave % 5 === 0 ? '⚠️ 第 ' + G.wave + ' 波 · 敌将来袭！' : '第 ' + G.wave + ' 波 来袭');
+}
+function spawnEnemy(type, hpMul) {
+  const d = ENEMY_TYPES[type];
+  const row = Math.floor(Math.random() * ROWS);
+  G.enemies.push({ type, row, x: -14, hp: Math.round(d.hp * hpMul), maxHp: Math.round(d.hp * hpMul),
+                   spd: d.spd * (1 + (G.wave-1) * 0.02) * (0.9 + Math.random()*0.2), flash: 0 });
+}
+
+// ============ 征兵 & 手牌 ============
+function pullCostNow() { return G.pullCost; }
+function doPull() {
+  if (G.over) return;
+  if (G.hand.length >= 5) { showMsg('手牌满了，先放置或合成'); return; }
+  const cost = pullCostNow();
+  if (G.mt < cost) { showMsg('馒头不够'); return; }
+  G.mt -= cost; G.pullCost += PULL_STEP;
+  const lines = Object.keys(LINES);
+  const line = lines[Math.floor(Math.random() * lines.length)];
+  G.hand.push({ line, lv: 1 });
+  G.selHand = G.hand.length - 1;
+  renderHand(); updateTop();
+}
+function renderHand() {
+  const h = document.getElementById('hand'); h.innerHTML = '';
+  for (let i = 0; i < 5; i++) {
+    const s = document.createElement('div'); s.className = 'slot';
+    const u = G.hand[i];
+    if (u) {
+      const L = LINES[u.line];
+      s.textContent = L.tiers[u.lv-1]; s.style.color = L.color;
+      s.innerHTML = L.tiers[u.lv-1] + (u.lv > 1 ? '<span class="lv">Lv' + u.lv + '</span>' : '');
+      if (i === G.selHand) s.classList.add('sel');
+      s.addEventListener('click', () => {
+        G.selHand = (G.selHand === i) ? -1 : i; G.selCell = null; renderHand();
+      });
+    }
+    h.appendChild(s);
+  }
+  document.getElementById('btnPull').textContent = '🍚 征兵 (' + pullCostNow() + ')';
+  document.getElementById('btnPull').disabled = G.hand.length >= 5;
+}
+
+// ============ 棋盘交互：点选放置 / 拖动合成 ============
+function cellAt(px, py) {
+  const c = Math.floor((px - gridX) / cellW), r = Math.floor((py - gridY) / cellH);
+  return (c >= 0 && c < COLS && r >= 0 && r < ROWS) ? { r, c } : null;
+}
+let dragCell = null, dragXY = null;
+function cellCenter(r, c) { return { x: gridX + c*cellW + cellW/2, y: gridY + r*cellH + cellH/2 }; }
+
+cv.addEventListener('pointerdown', e => {
+  if (G.over) return;
+  const rect = cv.getBoundingClientRect();
+  const px = e.clientX - rect.left, py = e.clientY - rect.top;
+  const cell = cellAt(px, py);
+  if (!cell) return;
+  if (G.selHand >= 0) { placeFromHand(cell); return; }
+  if (G.grid[cell.r][cell.c]) { dragCell = cell; dragXY = {x: px, y: py}; G.selCell = cell; }
+});
+cv.addEventListener('pointermove', e => {
+  if (!dragCell) return;
+  const rect = cv.getBoundingClientRect();
+  dragXY = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+});
+cv.addEventListener('pointerup', e => {
+  if (!dragCell) { G.selCell = null; return; }
+  const rect = cv.getBoundingClientRect();
+  const px = e.clientX - rect.left, py = e.clientY - rect.top;
+  const target = cellAt(px, py);
+  const src = dragCell; dragCell = null; dragXY = null;
+  if (!target || (target.r === src.r && target.c === src.c)) { if (target) G.selCell = null; return; }
+  const a = G.grid[src.r][src.c], b = G.grid[target.r][target.c];
+  if (b && a.line === b.line && a.lv === b.lv && a.lv < WUJIANG_LV) {   // 合成
+    G.grid[target.r][target.c] = { line: a.line, lv: a.lv + 1, flash: 0.4 };
+    G.grid[src.r][src.c] = null;
+    showMsg('合成！' + LINES[a.line].tiers[a.lv] + (a.lv+1 === WUJIANG_LV ? ' → 觉醒武将！' : ''));
+  } else {                                                              // 移动 / 交换
+    G.grid[target.r][target.c] = a; G.grid[src.r][src.c] = b || null;
+  }
+  G.selCell = null;
+});
+function placeFromHand(cell) {
+  const u = G.hand[G.selHand];
+  if (!u) return;
+  const cur = G.grid[cell.r][cell.c];
+  if (cur && cur.line === u.line && cur.lv === u.lv && cur.lv < WUJIANG_LV) {
+    G.grid[cell.r][cell.c] = { line: u.line, lv: u.lv + 1, flash: 0.4 };
+    G.hand.splice(G.selHand, 1);
+    showMsg('合成！' + LINES[u.line].tiers[u.lv] + (u.lv+1 === WUJIANG_LV ? ' → 觉醒武将！' : ''));
+    G.selHand = -1;
+  } else if (!cur) {
+    G.grid[cell.r][cell.c] = { line: u.line, lv: u.lv, flash: 0.3 };
+    G.hand.splice(G.selHand, 1); G.selHand = -1;
+  } else { showMsg('只能放到空格，或与同种同级合成'); return; }
+  renderHand();
+}
+
+// ============ 战斗 ============
+function update(dt) {
+  if (G.over) return;
+  G.t += dt;
+  G.mt += MT_RATE * dt;
+  // 出兵
+  if (G.waveActive) {
+    G.spawnT -= dt;
+    if (G.spawnT <= 0 && G.spawnQueue.length) {
+      const s = G.spawnQueue.shift(); spawnEnemy(s.type, s.hpMul);
+      G.spawnT = s.type === 'boss' ? 1.5 : Math.max(0.45, 1.4 - G.wave * 0.04);
+    }
+    if (!G.spawnQueue.length && !G.enemies.length) {   // 本波清空
+      G.waveActive = false;
+      G.pullCost = PULL_BASE;
+      if (G.wave >= MAX_WAVE && !G.endless) { victory(); return; }
+      G.interT = 3;
+      showMsg('本波清空！+' + (10 + G.wave*2) + ' 🍚 奖励');
+      G.mt += 10 + G.wave * 2;
+    }
+  } else {
+    G.interT -= dt;
+    if (G.interT <= 0) startWave();
+  }
+  // 敌人移动
+  for (const e of G.enemies) {
+    e.x += e.spd * dt; if (e.flash > 0) e.flash -= dt;
+    if (e.x >= adouX - 6) {
+      G.hp -= ENEMY_TYPES[e.type].dmg;
+      e.dead = true; updateTop();
+      if (G.hp <= 0) { gameOver(); return; }
+    }
+  }
+  G.enemies = G.enemies.filter(e => !e.dead);
+  // 单位攻击
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const u = G.grid[r][c]; if (!u) continue;
+    if (u.flash > 0) u.flash -= dt;
+    u.cd = (u.cd || 0) - dt; if (u.cd > 0) continue;
+    const L = LINES[u.line], cx = cellCenter(r, c).x;
+    const inRow = G.enemies.filter(e => e.row === r && e.x < cx + cellW*0.4);
+    if (!inRow.length) continue;
+    let rangePx = L.range[u.lv-1] * cellW;
+    let targets;
+    if (L.kind === 'melee') {
+      targets = inRow.filter(e => cx - e.x <= rangePx + cellW*0.4);
+      if (L.aoe[u.lv-1] > 0) {   // 关羽：命中范围内 AOE
+        const hit = targets.filter(e => cx - e.x <= rangePx + L.aoe[u.lv-1]*cellW);
+        if (hit.length) { targets.forEach(e => damage(e, L.atk[u.lv-1])); u.cd = L.rate[u.lv-1]; u.flash = 0.15; }
+      } else if (targets.length) { damage(targets[0], L.atk[u.lv-1]); u.cd = L.rate[u.lv-1]; u.flash = 0.12; }
+    } else if (L.kind === 'ranged') {          // 弓/黄忠：整行最前（最靠右）
+      inRow.sort((a,b) => b.x - a.x);
+      if (L.aoe[u.lv-1] > 0 || u.lv === WUJIANG_LV) inRow.forEach(e => damage(e, L.atk[u.lv-1]));  // 黄忠打全行
+      else damage(inRow[0], L.atk[u.lv-1]);
+      u.cd = L.rate[u.lv-1]; u.flash = 0.12;
+    } else {                                   // 戟/赵云：穿透，从近到远打 N 个
+      inRow.sort((a,b) => b.x - a.x);
+      const n = u.lv === WUJIANG_LV ? 99 : 3;
+      let hitAny = false, cnt = 0;
+      for (const e of inRow) {
+        if (cx - e.x <= rangePx || u.lv === WUJIANG_LV) { damage(e, L.atk[u.lv-1]); hitAny = true; if (++cnt >= n && u.lv !== WUJIANG_LV) break; }
+      }
+      if (hitAny) { u.cd = L.rate[u.lv-1]; u.flash = 0.12; }
+    }
+  }
+  updateTop();
+}
+function damage(e, atk) {
+  e.hp -= atk; e.flash = 0.12;
+  if (e.hp <= 0) { e.dead = true; G.kills++; G.mt += ENEMY_TYPES[e.type].bounty; }
+}
+
+// ============ 绘制 ============
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  // 沙盘底色
+  ctx.fillStyle = '#211b12'; ctx.fillRect(0, 0, W, H);
+  // 格子
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const x = gridX + c*cellW, y = gridY + r*cellH;
+    ctx.fillStyle = (r+c) % 2 ? '#2a2316' : '#251f13';
+    ctx.fillRect(x+2, y+2, cellW-4, cellH-4);
+    ctx.strokeStyle = '#3a3122'; ctx.strokeRect(x+2.5, y+2.5, cellW-5, cellH-5);
+    if (G.selCell && G.selCell.r === r && G.selCell.c === c) { ctx.strokeStyle = '#ffd76e'; ctx.lineWidth = 2; ctx.strokeRect(x+2, y+2, cellW-4, cellH-4); ctx.lineWidth = 1; }
+  }
+  // 阿斗区
+  ctx.fillStyle = '#1a150d'; ctx.fillRect(gridX + cellW*COLS + 4, gridY, W - gridX - cellW*COLS - 12, cellH*ROWS);
+  ctx.save(); ctx.translate(adouX, gridY + cellH*ROWS/2); ctx.rotate(-0.1);
+  ctx.font = Math.floor(cellW*0.5) + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('👶', 0, -cellH*0.5);
+  ctx.font = '900 ' + Math.floor(cellW*0.28) + 'px sans-serif'; ctx.fillStyle = '#ffd76e';
+  ctx.fillText('阿斗', 0, cellH*0.35);
+  ctx.restore();
+  // 敌人
+  for (const e of G.enemies) {
+    const d = ENEMY_TYPES[e.type];
+    const y = gridY + e.row*cellH + cellH/2;
+    const size = e.type === 'boss' ? cellW*0.5 : cellW*0.38;
+    ctx.beginPath(); ctx.arc(e.x, y, size/2 + 2, 0, 7);
+    ctx.fillStyle = e.flash > 0 ? '#ffffff' : d.color; ctx.fill();
+    ctx.font = '900 ' + Math.floor(size*0.62) + 'px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff'; ctx.fillText(d.ch, e.x, y + 1);
+    // 血条
+    const bw = size * 1.3;
+    ctx.fillStyle = '#00000088'; ctx.fillRect(e.x - bw/2, y - size/2 - 8, bw, 4);
+    ctx.fillStyle = '#e74c3c'; ctx.fillRect(e.x - bw/2, y - size/2 - 8, bw * Math.max(0, e.hp/e.maxHp), 4);
+  }
+  // 我方单位
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const u = G.grid[r][c]; if (!u) continue;
+    const L = LINES[u.line], { x, y } = cellCenter(r, c);
+    const s = Math.min(cellW, cellH) * (u.flash > 0 ? 0.94 : 0.86);
+    ctx.fillStyle = u.flash > 0 ? '#ffffff' : L.color;
+    roundRect(x - s/2, y - s/2, s, s, 8); ctx.fill();
+    ctx.fillStyle = '#1c160c'; ctx.font = '900 ' + Math.floor(s*0.42) + 'px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(L.tiers[u.lv-1], x, y - s*0.08);
+    if (u.lv > 1) { ctx.font = 'bold ' + Math.floor(s*0.22) + 'px sans-serif'; ctx.fillText('Lv' + u.lv, x, y + s*0.32); }
+    if (u.lv === WUJIANG_LV) { ctx.strokeStyle = '#ffd76e'; ctx.lineWidth = 2; roundRect(x - s/2, y - s/2, s, s, 8); ctx.stroke(); ctx.lineWidth = 1; }
+  }
+  // 拖动中的棋子
+  if (dragCell && dragXY) {
+    const u = G.grid[dragCell.r][dragCell.c];
+    if (u) { const L = LINES[u.line]; ctx.globalAlpha = 0.75; ctx.fillStyle = L.color; roundRect(dragXY.x-20, dragXY.y-20, 40, 40, 8); ctx.fill(); ctx.globalAlpha = 1; }
+  }
+  // 波次提示
+  if (G.msg && G.msgT > 0) {
+    G.msgT -= 0.016;
+    ctx.fillStyle = 'rgba(0,0,0,' + Math.min(0.6, G.msgT) + ')';
+    ctx.fillRect(W/2 - 130, H*0.28, 260, 34);
+    ctx.fillStyle = '#ffd76e'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(G.msg, W/2, H*0.28 + 17);
+  }
+}
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x+r, y); ctx.arcTo(x+w, y, x+w, y+h, r); ctx.arcTo(x+w, y+h, x, y+h, r); ctx.arcTo(x, y+h, x, y, r); ctx.arcTo(x, y, x+w, y, r); ctx.closePath(); }
+
+// ============ UI ============
+function updateTop() {
+  document.getElementById('mantou').textContent = '🍚 ' + Math.floor(G.mt);
+  document.getElementById('hp').textContent = '斗 ' + '❤'.repeat(Math.max(0, G.hp)) + '🖤'.repeat(Math.max(0, 5 - G.hp));
+  document.getElementById('wavePill').textContent = G.endless ? '第 ' + G.wave + ' 波' : '第 ' + Math.max(1, G.wave) + '/' + MAX_WAVE + ' 波';
+}
+function showMsg(m) { G.msg = m; G.msgT = 2; }
+const panel = document.getElementById('panel');
+function showPanel(title, desc, btns) {
+  document.getElementById('pTitle').textContent = title;
+  document.getElementById('pDesc').innerHTML = desc;
+  const b = document.getElementById('pBtns'); b.innerHTML = '';
+  btns.forEach(([t, fn, gray]) => { const el = document.createElement('button'); el.textContent = t; if (gray) el.className = 'gray'; el.onclick = fn; b.appendChild(el); });
+  panel.style.display = 'flex';
+}
+function hidePanel() { panel.style.display = 'none'; }
+function gameOver() {
+  G.over = true;
+  showPanel('💀 阿斗被抓走了', '守住到第 ' + G.wave + ' 波 · 击杀 ' + G.kills + ' 人<br>调整阵型再来！', [['🔄 再来一局', () => newGame()]]);
+}
+function victory() {
+  G.over = true; G.won = true;
+  showPanel('🏆 胜利！救出阿斗！', '通关 15 波 · 击杀 ' + G.kills + ' 人<br>子龙浑身是胆！', [
+    ['🌊 无尽模式', () => { G.over = false; G.endless = true; G.won = false; hidePanel(); G.interT = 3; }],
+    ['🔄 再来一局', () => newGame(), true]]);
+}
+document.getElementById('btnPull').addEventListener('click', doPull);
+document.getElementById('btnRestart').addEventListener('click', () => newGame());
+document.getElementById('speed').addEventListener('click', function () {
+  G.speed = G.speed === 1 ? 2 : (G.speed === 2 ? 3 : 1);
+  this.textContent = '⏩x' + G.speed;
+});
+
+// ============ 主循环 ============
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (G && !G.over) for (let i = 0; i < G.speed; i++) update(dt);
+  if (G) draw();
+  requestAnimationFrame(loop);
+}
+layout(); newGame(); requestAnimationFrame(loop);
+window.G = G; window.testHooks = { placeFromHand, doPull, startWave, newGame, update, gameOver, LINES };
+</script>
+</body>
+</html>
