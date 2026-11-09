@@ -22,7 +22,8 @@
   #bottom { flex-shrink: 0; padding: 6px 10px calc(10px + env(safe-area-inset-bottom)); background: #1e1912; border-top: 1px solid #3a3122; }
   #hand { display: flex; gap: 6px; margin-bottom: 8px; }
   .slot { flex: 1; aspect-ratio: 1/1; max-width: 64px; background: #2a2418; border: 2px solid #4a3f2a; border-radius: 10px;
-          display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 800; color: #e8dcc0; position: relative; }
+          display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 800; color: #e8dcc0; position: relative;
+          touch-action: none; -webkit-touch-callout: none; }
   .slot.sel { border-color: #ffd76e; box-shadow: 0 0 8px #ffd76e66; background: #3a3118; }
   .slot .lv { position: absolute; right: 3px; bottom: 1px; font-size: 10px; color: #c9b98a; }
   #btnRow { display: flex; gap: 8px; }
@@ -312,15 +313,16 @@ handEl.addEventListener('pointerdown', e => {
     renderHand(); return;
   }
   handDrag = { idx, moved: false, startX: e.clientX, startY: e.clientY };
-  slot.setPointerCapture(e.pointerId);
+  try { slot.setPointerCapture(e.pointerId); } catch (_) {}
   ghostSetup(G.hand[idx]); ghostMove(e.clientX, e.clientY);
 });
-handEl.addEventListener('pointermove', e => {
+// 监听挂在 document 上：无论指针捕获是否生效，拖到棋盘/垃圾桶都能收到 move/up
+document.addEventListener('pointermove', e => {
   if (!handDrag) return;
   if (Math.hypot(e.clientX - handDrag.startX, e.clientY - handDrag.startY) > 10) handDrag.moved = true;
   ghostMove(e.clientX, e.clientY);
-});
-handEl.addEventListener('pointerup', e => {  if (!handDrag) return;
+}, { passive: false });
+document.addEventListener('pointerup', e => {  if (!handDrag) return;
   const { idx, moved } = handDrag; handDrag = null; ghostHide();
   if (!moved) { G.selHand = (G.selHand === idx) ? -1 : idx; G.selCell = null; renderHand(); return; }   // 没动 = 点选
   const u = G.hand[idx]; if (!u) { renderHand(); return; }
@@ -348,6 +350,7 @@ handEl.addEventListener('pointerup', e => {  if (!handDrag) return;
   }
   renderHand();                                              // 放回原处
 });
+document.addEventListener('pointercancel', () => { handDrag = null; ghostHide(); });
 
 // ============ 战斗 ============
 function update(dt) {
