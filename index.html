@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>赵云与君 · 网页复刻版</title>
+<title>赵云与石雅君 · 网页复刻版</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
   html, body { margin: 0; padding: 0; background: #17140f; color: #e8dcc0; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; }
@@ -44,7 +44,7 @@
 <div id="wrap">
   <div id="top">
     <div class="pill" id="mantou">🍚 0</div>
-    <div class="pill" id="hp">君 ❤❤❤❤❤</div>
+    <div class="pill" id="hp">石雅君 ❤❤❤❤❤</div>
     <div class="pill" id="wavePill">第 1/15 波</div>
     <button class="pill" id="speed" style="font-size:12px;">⏩x1</button>
   </div>
@@ -64,19 +64,19 @@
 'use strict';
 // ============ 配置 ============
 const LINES = {
-  zu:  { name:'卒线', tiers:['卒','兵','校尉','关羽'], color:'#e07a5f', atk:[8,16,32,70],   rate:[0.9,0.8,0.8,1.3],  kind:'melee', range:[0.9,0.9,1.6,1.8], aoe:[0,0,0.7,1.2] },
-  gong:{ name:'弓线', tiers:['弓','箭','连弩','黄忠'], color:'#7fb069', atk:[4,8,11,24],    rate:[1.0,0.9,0.55,0.8], kind:'ranged', range:[99,99,99,99], aoe:[0,0,0,0] },
-  ji:  { name:'戟线', tiers:['戟','枪','铁骑','赵云'], color:'#6ea8dc', atk:[6,12,24,42],   rate:[1.2,1.0,0.9,0.7],  kind:'pierce', range:[2.2,2.6,99,99], aoe:[0,0,0,0] },
+  zu:  { name:'卒线', tiers:['卒','兵','校尉','苗苗'], color:'#e07a5f', atk:[8,16,32,70],   rate:[0.9,0.8,0.8,1.3],  kind:'melee', range:[0.9,0.9,1.6,1.8], aoe:[0,0,0.7,1.2] },
+  gong:{ name:'弓线', tiers:['弓','箭','连弩','菲菲'], color:'#7fb069', atk:[4,8,11,24],    rate:[1.0,0.9,0.55,0.8], kind:'ranged', range:[99,99,99,99], aoe:[0,0,0,0] },
+  ji:  { name:'戟线', tiers:['戟','枪','铁骑','小惠'], color:'#6ea8dc', atk:[6,12,24,42],   rate:[1.2,1.0,0.9,0.7],  kind:'pierce', range:[2.2,2.6,99,99], aoe:[0,0,0,0] },
 };
 const WUJIANG_LV = 4;
 const MAX_WAVE = 15;
 const PULL_BASE = 10, PULL_STEP = 5;
 const MT_RATE = 2.2;           // 每秒馒头产出
 const ENEMY_TYPES = {
-  bing:  { ch:'史', color:'#c0392b', hp:30,  spd:13, bounty:3, dmg:1 },
-  qi:    { ch:'鹏', color:'#d35400', hp:22,  spd:22, bounty:4, dmg:1 },
-  dun:   { ch:'程', color:'#7f5a3c', hp:70,  spd:9,  bounty:5, dmg:1 },
-  boss:  { ch:'sbc', color:'#8e44ad', hp:400, spd:7,  bounty:30, dmg:3 },
+  bing:  { ch:'弓箭手小史', color:'#c0392b', hp:30,  spd:13, bounty:3, dmg:1 },
+  qi:    { ch:'骁骑兵小史', color:'#d35400', hp:22,  spd:22, bounty:4, dmg:1 },
+  dun:   { ch:'盾牌兵小史', color:'#7f5a3c', hp:70,  spd:9,  bounty:5, dmg:1 },
+  boss:  { ch:'邪恶大boos\n史鹏程', color:'#8e44ad', hp:400, spd:7,  bounty:30, dmg:3 },
 };
 const ROWS = 5, COLS = 4;
 
@@ -103,9 +103,10 @@ function layout() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   W = r.width; H = r.height;
   const pad = 8, adouW = 52;
-  cellW = (W - pad*2 - adouW) / COLS;
+  const availW = W - pad*2 - adouW;
+  cellW = Math.min(availW * 0.7 / COLS, (H - pad*2) / ROWS);   // 地图缩小：格子只占可用宽度的 70%，左右留出视野
   cellH = Math.min(cellW, (H - pad*2) / ROWS);
-  gridX = pad + (W - pad*2 - adouW - cellW*COLS) / 2;
+  gridX = pad + (availW - cellW*COLS) / 2;
   gridY = pad + (H - pad*2 - cellH*ROWS) / 2;
   adouX = gridX + cellW*COLS + adouW/2;
 }
@@ -134,7 +135,7 @@ function startWave() {
 function spawnEnemy(type, hpMul) {
   const d = ENEMY_TYPES[type];
   const row = Math.floor(Math.random() * ROWS);
-  G.enemies.push({ type, row, x: -14, hp: Math.round(d.hp * hpMul), maxHp: Math.round(d.hp * hpMul),
+  G.enemies.push({ type, row, x: gridX - cellW*0.8, hp: Math.round(d.hp * hpMul), maxHp: Math.round(d.hp * hpMul),
                    spd: d.spd * (1 + (G.wave-1) * 0.02) * (0.9 + Math.random()*0.2), flash: 0 });
 }
 
@@ -317,24 +318,11 @@ function draw() {
   ctx.save(); ctx.translate(adouX, gridY + cellH*ROWS/2); ctx.rotate(-0.1);
   ctx.font = Math.floor(cellW*0.5) + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText('👶', 0, -cellH*0.5);
-  ctx.font = '900 ' + Math.floor(cellW*0.28) + 'px sans-serif'; ctx.fillStyle = '#ffd76e';
-  ctx.fillText('君', 0, cellH*0.35);
+  ctx.font = '900 ' + Math.floor(cellW*0.22) + 'px sans-serif'; ctx.fillStyle = '#ffd76e';
+  ctx.fillText('石雅君', 0, cellH*0.35);
   ctx.restore();
-  // 敌人
-  for (const e of G.enemies) {
-    const d = ENEMY_TYPES[e.type];
-    const y = gridY + e.row*cellH + cellH/2;
-    const size = e.type === 'boss' ? cellW*0.5 : cellW*0.38;
-    ctx.beginPath(); ctx.arc(e.x, y, size/2 + 2, 0, 7);
-    ctx.fillStyle = e.flash > 0 ? '#ffffff' : d.color; ctx.fill();
-    ctx.font = '900 ' + Math.floor(size*0.62 / Math.max(1, d.ch.length*0.75)) + 'px sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fff'; ctx.fillText(d.ch, e.x, y + 1);
-    // 血条
-    const bw = size * 1.3;
-    ctx.fillStyle = '#00000088'; ctx.fillRect(e.x - bw/2, y - size/2 - 8, bw, 4);
-    ctx.fillStyle = '#e74c3c'; ctx.fillRect(e.x - bw/2, y - size/2 - 8, bw * Math.max(0, e.hp/e.maxHp), 4);
-  }
+  // 敌人（绘制移到棋子之后，漂浮在上层）
+
   // 我方单位
   for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
     const u = G.grid[r][c]; if (!u) continue;
@@ -347,6 +335,28 @@ function draw() {
     ctx.fillText(L.tiers[u.lv-1], x, y - s*0.08);
     if (u.lv > 1) { ctx.font = 'bold ' + Math.floor(s*0.22) + 'px sans-serif'; ctx.fillText('Lv' + u.lv, x, y + s*0.32); }
     if (u.lv === WUJIANG_LV) { ctx.strokeStyle = '#ffd76e'; ctx.lineWidth = 2; roundRect(x - s/2, y - s/2, s, s, 8); ctx.stroke(); ctx.lineWidth = 1; }
+  }
+  // 敌人：透明背景，文字带描边，漂浮在我方棋子上面经过
+  for (const e of G.enemies) {
+    const d = ENEMY_TYPES[e.type];
+    const y = gridY + e.row*cellH + cellH/2;
+    const lines = d.ch.split('\n');
+    const fs = Math.floor(cellW * (lines.length > 1 ? 0.26 : 0.34));
+    ctx.font = '900 ' + fs + 'px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const w = Math.max(...lines.map(l => ctx.measureText(l).width));
+    // 血条
+    const bw = Math.max(w, fs*1.5);
+    ctx.fillStyle = '#000000aa'; ctx.fillRect(e.x - bw/2, y - fs*lines.length/2 - 9, bw, 4);
+    ctx.fillStyle = '#e74c3c'; ctx.fillRect(e.x - bw/2, y - fs*lines.length/2 - 9, bw * Math.max(0, e.hp/e.maxHp), 4);
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(18,14,8,0.8)'; ctx.lineJoin = 'round';
+    lines.forEach((l, i) => {
+      const ly = y + (i - (lines.length-1)/2) * (fs + 3);
+      ctx.strokeText(l, e.x, ly);
+      ctx.fillStyle = e.flash > 0 ? '#ffffff' : d.color;
+      ctx.fillText(l, e.x, ly);
+    });
+    ctx.lineWidth = 1;
   }
   // 拖动中的棋子
   if (dragCell && dragXY) {
@@ -367,7 +377,7 @@ function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x+r, y); ctx.arc
 // ============ UI ============
 function updateTop() {
   document.getElementById('mantou').textContent = '🍚 ' + Math.floor(G.mt);
-  document.getElementById('hp').textContent = '君 ' + '❤'.repeat(Math.max(0, G.hp)) + '🖤'.repeat(Math.max(0, 5 - G.hp));
+  document.getElementById('hp').textContent = '石雅君 ' + '❤'.repeat(Math.max(0, G.hp)) + '🖤'.repeat(Math.max(0, 5 - G.hp));
   document.getElementById('wavePill').textContent = G.endless ? '第 ' + G.wave + ' 波' : '第 ' + Math.max(1, G.wave) + '/' + MAX_WAVE + ' 波';
 }
 function showMsg(m) { G.msg = m; G.msgT = 2; }
@@ -382,11 +392,11 @@ function showPanel(title, desc, btns) {
 function hidePanel() { panel.style.display = 'none'; }
 function gameOver() {
   G.over = true;
-  showPanel('💀 君被抓走了', '守住到第 ' + G.wave + ' 波 · 击杀 ' + G.kills + ' 人<br>调整阵型再来！', [['🔄 再来一局', () => newGame()]]);
+  showPanel('💀 石雅君被抓走了', '守住到第 ' + G.wave + ' 波 · 击杀 ' + G.kills + ' 人<br>调整阵型再来！', [['🔄 再来一局', () => newGame()]]);
 }
 function victory() {
   G.over = true; G.won = true;
-  showPanel('🏆 胜利！救出君！', '通关 15 波 · 击杀 ' + G.kills + ' 人<br>子龙浑身是胆！', [
+  showPanel('🏆 宝宝你太厉害了，通关啦', '通关 15 波 · 击杀 ' + G.kills + ' 人', [
     ['🌊 无尽模式', () => { G.over = false; G.endless = true; G.won = false; hidePanel(); G.interT = 3; }],
     ['🔄 再来一局', () => newGame(), true]]);
 }
