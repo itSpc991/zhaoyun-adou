@@ -32,8 +32,8 @@
   #btnRestart { flex: 1; padding: 14px 0; background: #3a3122; color: #e8dcc0; }
   #btnTrash { flex: 0 0 56px; padding: 14px 0; background: #3a3122; color: #e8dcc0; font-size: 18px; }
   #btnTrash.hot { outline: 2px solid #ff8a7a; background: #4a2a22; }
-  #ghost { position: fixed; width: 40px; height: 40px; border-radius: 8px; display: none; z-index: 20; pointer-events: none;
-           align-items: center; justify-content: center; font-weight: 900; font-size: 15px; color: #1c160c; }
+  #ghost { position: fixed; width: 46px; height: 46px; border-radius: 9px; display: none; z-index: 20; pointer-events: none;
+           align-items: center; justify-content: center; font-weight: 900; font-size: 16px; color: #1c160c; }
   #hint { font-size: 12px; color: #8a7f65; margin-top: 6px; text-align: center; }
   /* 面板 */
   #panel { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); align-items: center; justify-content: center; z-index: 10; }
@@ -191,6 +191,13 @@ function cellAt(px, py) {
   const c = Math.floor((px - gridX) / cellW), r = Math.floor((py - gridY) / cellH);
   return (c >= 0 && c < COLS && r >= 0 && r < ROWS) ? { r, c } : null;
 }
+function nearestCell(px, py) {
+  // 磁吸：吸附到最近的格子中心（容差 0.8 格），大幅提升拖放精度
+  const c = Math.round((px - gridX) / cellW - 0.5), r = Math.round((py - gridY) / cellH - 0.5);
+  if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return null;
+  const cx = gridX + c*cellW + cellW/2, cy = gridY + r*cellH + cellH/2;
+  return Math.hypot(px - cx, py - cy) <= Math.min(cellW, cellH) * 0.8 ? { r, c } : null;
+}
 let dragDown = null, placeMode = false, dragCell = null, dragXY = null;
 function cellCenter(r, c) { return { x: gridX + c*cellW + cellW/2, y: gridY + r*cellH + cellH/2 }; }
 
@@ -202,9 +209,10 @@ cv.addEventListener('pointerdown', e => {
   const rect = cv.getBoundingClientRect();
   const px = e.clientX - rect.left, py = e.clientY - rect.top;
   const cell = cellAt(px, py);
+  const ncell = nearestCell(px, py);   // 点按时不带预览偏移
   if (G.selHand >= 0) {
-    if (!cell) return;
-    placeMode = true; dragDown = { x: px, y: py }; dragXY = { x: px, y: py }; G.selCell = cell;
+    if (!ncell) return;
+    placeMode = true; dragDown = { x: px, y: py }; dragXY = { x: px, y: py }; G.selCell = ncell;
     return;
   }
   if (cell && G.grid[cell.r][cell.c]) { dragCell = cell; dragDown = { x: px, y: py }; dragXY = { x: px, y: py }; G.selCell = cell; }
@@ -213,15 +221,15 @@ cv.addEventListener('pointermove', e => {
   if (!placeMode && !dragCell) return;
   const rect = cv.getBoundingClientRect();
   dragXY = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  if (placeMode) G.selCell = cellAt(dragXY.x, dragXY.y);   // 实时高亮落点
+  if (placeMode || dragCell) G.selCell = nearestCell(dragXY.x, dragXY.y - 30);   // 实时高亮落点（跟随手指上方30px的预览位置）
 });
 function endPointer(px, py, cx, cy) {
   const dist = dragDown ? Math.hypot(px - dragDown.x, py - dragDown.y) : 99;
   const target = cellAt(px, py);
   if (placeMode) {
     placeMode = false;
-    // 抖动容差内按"按下时"的格子算，防止点A放到隔壁B；拖出棋盘松手=取消
-    const cell = dist <= TAP_SLOP ? cellAt(dragDown.x, dragDown.y) : target;
+    // 抖动容差内按"按下时"的落点算，防止点A放到隔壁B；拖出棋盘松手=取消
+    const cell = dist <= TAP_SLOP ? nearestCell(dragDown.x, dragDown.y) : nearestCell(px, py - 30);
     if (cell) placeFromHand(cell);
     dragDown = null; dragXY = null; G.selCell = null;
     return;
@@ -235,14 +243,16 @@ function endPointer(px, py, cx, cy) {
     showMsg('卖出 +' + sellValue(u) + ' 🍚');
     updateTop(); G.selCell = null; dragDown = null; return;
   }
-  if (!target || (target.r === src.r && target.c === src.c)) { G.selCell = null; dragDown = null; return; }
-  const a = G.grid[src.r][src.c], b = G.grid[target.r][target.c];
+  if (!target && !dragXY) { G.selCell = null; dragDown = null; return; }
+  const dropTarget = nearestCell(px, py - 30);   // 落点=预览所在格
+  if (!dropTarget || (dropTarget.r === src.r && dropTarget.c === src.c)) { G.selCell = null; dragDown = null; return; }
+  const a = G.grid[src.r][src.c], b = G.grid[dropTarget.r][dropTarget.c];
   if (canMerge(a, b)) {                                                  // 合成（含无尽模式升星）
-    G.grid[target.r][target.c] = mergeInto(a);
+    G.grid[dropTarget.r][dropTarget.c] = mergeInto(a);
     G.grid[src.r][src.c] = null;
-    showMsg('合成！' + unitName(G.grid[target.r][target.c]));
+    showMsg('合成！' + unitName(G.grid[dropTarget.r][dropTarget.c]));
   } else {                                                              // 移动 / 交换
-    G.grid[target.r][target.c] = a; G.grid[src.r][src.c] = b || null;
+    G.grid[dropTarget.r][dropTarget.c] = a; G.grid[src.r][src.c] = b || null;
   }
   G.selCell = null; dragDown = null;
 }
@@ -277,9 +287,9 @@ function ghostSetup(u) {
   ghostEl.style.display = 'flex';
   trashBtn.classList.add('hot');
 }
-function ghostMove(x, y) { ghostEl.style.left = (x - 20) + 'px'; ghostEl.style.top = (y - 20) + 'px'; }
+function ghostMove(x, y) { ghostEl.style.left = (x - 23) + 'px'; ghostEl.style.top = (y - 53) + 'px'; }   // 预览显示在手指上方30px
 function ghostHide() { ghostEl.style.display = 'none'; trashBtn.classList.remove('hot'); }
-function inTrash(x, y) { const r = trashBtn.getBoundingClientRect(); return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; }
+function inTrash(x, y) { const r = trashBtn.getBoundingClientRect(); return x >= r.left-10 && x <= r.right+10 && y >= r.top-10 && y <= r.bottom+10; }
 function handSlotAt(x, y) {
   for (let i = 0; i < handEl.children.length; i++) {
     const r = handEl.children[i].getBoundingClientRect();
@@ -322,8 +332,8 @@ handEl.addEventListener('pointerup', e => {  if (!handDrag) return;
     renderHand(); updateTop(); return;
   }
   const rect = cv.getBoundingClientRect();
-  const cell = cellAt(e.clientX - rect.left, e.clientY - rect.top);
-  if (cell) {                                                // 拖上棋盘放置 / 合成
+  const cell = nearestCell(e.clientX - rect.left, e.clientY - rect.top - 30);
+  if (cell) {                                                // 拖上棋盘放置 / 合成（磁吸）
     G.selHand = idx; placeFromHand(cell); G.selHand = -1; renderHand(); return;
   }
   const j = handSlotAt(e.clientX, e.clientY);
@@ -473,14 +483,14 @@ function draw() {
   // 拖动中的棋子 / 放置预览
   if (dragCell && dragXY) {
     const u = G.grid[dragCell.r][dragCell.c];
-    if (u) { const L = LINES[u.line]; ctx.globalAlpha = 0.75; ctx.fillStyle = L.color; roundRect(dragXY.x-20, dragXY.y-20, 40, 40, 8); ctx.fill(); ctx.globalAlpha = 1; }
+    if (u) { const L = LINES[u.line]; ctx.globalAlpha = 0.75; ctx.fillStyle = L.color; roundRect(dragXY.x-23, dragXY.y-53, 46, 46, 9); ctx.fill(); ctx.globalAlpha = 1; }
   }
   if (placeMode && dragXY && G.selHand >= 0 && G.hand[G.selHand]) {
     const u = G.hand[G.selHand], L = LINES[u.line];
-    ctx.globalAlpha = 0.6; ctx.fillStyle = L.color; roundRect(dragXY.x-20, dragXY.y-20, 40, 40, 8); ctx.fill();
+    ctx.globalAlpha = 0.6; ctx.fillStyle = L.color; roundRect(dragXY.x-23, dragXY.y-53, 46, 46, 9); ctx.fill();
     ctx.fillStyle = '#1c160c'; ctx.font = '900 16px "PingFang SC","Microsoft YaHei",sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(L.tiers[u.lv-1], dragXY.x, dragXY.y); ctx.globalAlpha = 1;
+    ctx.fillText(L.tiers[u.lv-1], dragXY.x, dragXY.y - 30); ctx.globalAlpha = 1;
   }
   // 波次提示
   if (G.msg && G.msgT > 0) {
