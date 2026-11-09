@@ -55,7 +55,7 @@
       <button id="btnPull">🍚 征兵 (10)</button>
       <button id="btnRestart">🔄 重开</button>
     </div>
-    <div id="hint">点「征兵」拿文字碎片 → 点碎片再点棋盘放置；点住上拖到相同的兵可合成</div>
+    <div id="hint">点「征兵」拿碎片 → 点碎片再点棋盘放置（手抖会自动吸附到你按下的格子）；按住棋子拖到相同的棋子上合成</div>
   </div>
 </div>
 <div id="panel"><div class="box"><div class="title" id="pTitle"></div><div class="desc" id="pDesc"></div><div id="pBtns"></div></div></div>
@@ -178,30 +178,44 @@ function cellAt(px, py) {
   const c = Math.floor((px - gridX) / cellW), r = Math.floor((py - gridY) / cellH);
   return (c >= 0 && c < COLS && r >= 0 && r < ROWS) ? { r, c } : null;
 }
-let dragCell = null, dragXY = null;
+let dragDown = null, placeMode = false, dragCell = null, dragXY = null;
 function cellCenter(r, c) { return { x: gridX + c*cellW + cellW/2, y: gridY + r*cellH + cellH/2 }; }
+
+const TAP_SLOP = 14;   // 手指抖动容差：位移小于此值视为"点了一下"，吸附到按下的格子
 
 cv.addEventListener('pointerdown', e => {
   if (G.over) return;
   const rect = cv.getBoundingClientRect();
   const px = e.clientX - rect.left, py = e.clientY - rect.top;
   const cell = cellAt(px, py);
-  if (!cell) return;
-  if (G.selHand >= 0) { placeFromHand(cell); return; }
-  if (G.grid[cell.r][cell.c]) { dragCell = cell; dragXY = {x: px, y: py}; G.selCell = cell; }
+  if (G.selHand >= 0) {
+    if (!cell) return;
+    placeMode = true; dragDown = { x: px, y: py }; dragXY = { x: px, y: py }; G.selCell = cell;
+    return;
+  }
+  if (cell && G.grid[cell.r][cell.c]) { dragCell = cell; dragDown = { x: px, y: py }; dragXY = { x: px, y: py }; G.selCell = cell; }
 });
 cv.addEventListener('pointermove', e => {
-  if (!dragCell) return;
+  if (!placeMode && !dragCell) return;
   const rect = cv.getBoundingClientRect();
   dragXY = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  if (placeMode) G.selCell = cellAt(dragXY.x, dragXY.y);   // 实时高亮落点
 });
-cv.addEventListener('pointerup', e => {
-  if (!dragCell) { G.selCell = null; return; }
-  const rect = cv.getBoundingClientRect();
-  const px = e.clientX - rect.left, py = e.clientY - rect.top;
+function endPointer(px, py) {
+  const dist = dragDown ? Math.hypot(px - dragDown.x, py - dragDown.y) : 99;
   const target = cellAt(px, py);
+  if (placeMode) {
+    placeMode = false;
+    // 抖动容差内按"按下时"的格子算，防止点A放到隔壁B；拖出棋盘松手=取消
+    const cell = dist <= TAP_SLOP ? cellAt(dragDown.x, dragDown.y) : target;
+    if (cell) placeFromHand(cell);
+    dragDown = null; dragXY = null; G.selCell = null;
+    return;
+  }
+  if (!dragCell) { G.selCell = null; dragDown = null; return; }
   const src = dragCell; dragCell = null; dragXY = null;
-  if (!target || (target.r === src.r && target.c === src.c)) { if (target) G.selCell = null; return; }
+  if (dist <= TAP_SLOP) { G.selCell = null; dragDown = null; return; }   // 只是点了一下棋子：不挪动
+  if (!target || (target.r === src.r && target.c === src.c)) { G.selCell = null; dragDown = null; return; }
   const a = G.grid[src.r][src.c], b = G.grid[target.r][target.c];
   if (b && a.line === b.line && a.lv === b.lv && a.lv < WUJIANG_LV) {   // 合成
     G.grid[target.r][target.c] = { line: a.line, lv: a.lv + 1, flash: 0.4 };
@@ -210,8 +224,13 @@ cv.addEventListener('pointerup', e => {
   } else {                                                              // 移动 / 交换
     G.grid[target.r][target.c] = a; G.grid[src.r][src.c] = b || null;
   }
-  G.selCell = null;
+  G.selCell = null; dragDown = null;
+}
+cv.addEventListener('pointerup', e => {
+  const rect = cv.getBoundingClientRect();
+  endPointer(e.clientX - rect.left, e.clientY - rect.top);
 });
+cv.addEventListener('pointercancel', () => { placeMode = false; dragCell = null; dragXY = null; dragDown = null; G.selCell = null; });
 function placeFromHand(cell) {
   const u = G.hand[G.selHand];
   if (!u) return;
@@ -358,10 +377,17 @@ function draw() {
     });
     ctx.lineWidth = 1;
   }
-  // 拖动中的棋子
+  // 拖动中的棋子 / 放置预览
   if (dragCell && dragXY) {
     const u = G.grid[dragCell.r][dragCell.c];
     if (u) { const L = LINES[u.line]; ctx.globalAlpha = 0.75; ctx.fillStyle = L.color; roundRect(dragXY.x-20, dragXY.y-20, 40, 40, 8); ctx.fill(); ctx.globalAlpha = 1; }
+  }
+  if (placeMode && dragXY && G.selHand >= 0 && G.hand[G.selHand]) {
+    const u = G.hand[G.selHand], L = LINES[u.line];
+    ctx.globalAlpha = 0.6; ctx.fillStyle = L.color; roundRect(dragXY.x-20, dragXY.y-20, 40, 40, 8); ctx.fill();
+    ctx.fillStyle = '#1c160c'; ctx.font = '900 16px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(L.tiers[u.lv-1], dragXY.x, dragXY.y); ctx.globalAlpha = 1;
   }
   // 波次提示
   if (G.msg && G.msgT > 0) {
