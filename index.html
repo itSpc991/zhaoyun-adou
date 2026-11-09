@@ -61,7 +61,7 @@
       <button id="btnRestart">🔄 重开</button>
       <button id="btnTrash" title="把兵拖到这里卖掉">🗑️</button>
     </div>
-    <div id="hint">点「征兵」拿碎片 → 点/拖碎片上棋盘（手抖自动吸附）；相同兵种互拖合成；拖到 🗑️ 卖兵换馒头；无尽模式 Lv4 还能升星</div>
+    <div id="hint">点「征兵」拿碎片 → 点碎片选中，再点棋盘放置；点两个相同兵种=合成；点兵选中再点别的格子=移动/换位；选中后点🗑️卖出；无尽模式 Lv4 可升星</div>
   </div>
 </div>
 <div id="ghost"></div>
@@ -216,17 +216,16 @@ cv.addEventListener('pointerdown', e => {
     placeMode = true; dragDown = { x: px, y: py }; dragXY = { x: px, y: py }; G.selCell = ncell;
     return;
   }
-  if (cell && G.grid[cell.r][cell.c]) { dragCell = cell; dragDown = { x: px, y: py }; dragXY = { x: px, y: py }; G.selCell = cell; }
+  if (cell) { dragCell = cell; dragDown = { x: px, y: py }; dragXY = { x: px, y: py }; }   // 任意格子都响应（空格=移动目标）
 });
 cv.addEventListener('pointermove', e => {
   if (!placeMode && !dragCell) return;
   const rect = cv.getBoundingClientRect();
   dragXY = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  if (placeMode || dragCell) G.selCell = nearestCell(dragXY.x, dragXY.y - 30);   // 实时高亮落点（跟随手指上方30px的预览位置）
+  if (placeMode) G.selCell = nearestCell(dragXY.x, dragXY.y - 30);   // 放置预览高亮
 });
 function endPointer(px, py, cx, cy) {
   const dist = dragDown ? Math.hypot(px - dragDown.x, py - dragDown.y) : 99;
-  const target = cellAt(px, py);
   if (placeMode) {
     placeMode = false;
     // 抖动容差内按"按下时"的落点算，防止点A放到隔壁B；拖出棋盘松手=取消
@@ -235,27 +234,41 @@ function endPointer(px, py, cx, cy) {
     dragDown = null; dragXY = null; G.selCell = null;
     return;
   }
-  if (!dragCell) { G.selCell = null; dragDown = null; return; }
+  if (!dragCell) { dragDown = null; return; }
   const src = dragCell; dragCell = null; dragXY = null;
-  if (dist <= TAP_SLOP) { G.selCell = null; dragDown = null; return; }   // 只是点了一下棋子：不挪动
-  if (cx !== undefined && inTrash(cx, cy)) {                             // 拖到垃圾桶卖掉
+  // 松手在垃圾桶：卖掉拖动的兵；若按下的格子上没兵，则卖掉当前选中的兵（点选兜底）
+  if (cx !== undefined && inTrash(cx, cy)) {
     const u = G.grid[src.r][src.c];
-    G.mt += sellValue(u); G.grid[src.r][src.c] = null;
-    showMsg('卖出 +' + sellValue(u) + ' 🍚');
-    updateTop(); G.selCell = null; dragDown = null; return;
+    if (u) {
+      G.mt += sellValue(u); G.grid[src.r][src.c] = null;
+      showMsg('卖出 +' + sellValue(u) + ' 🍚'); updateTop();
+    } else if (G.selCell && G.grid[G.selCell.r][G.selCell.c]) {
+      const su = G.grid[G.selCell.r][G.selCell.c];
+      G.mt += sellValue(su); G.grid[G.selCell.r][G.selCell.c] = null;
+      showMsg('卖出 +' + sellValue(su) + ' 🍚'); updateTop();
+      G.selCell = null;
+    }
+    dragDown = null; return;
   }
-  if (!target && !dragXY) { G.selCell = null; dragDown = null; return; }
-  const dropTarget = nearestCell(px, py - 30);   // 落点=预览所在格
-  if (!dropTarget || (dropTarget.r === src.r && dropTarget.c === src.c)) { G.selCell = null; dragDown = null; return; }
-  const a = G.grid[src.r][src.c], b = G.grid[dropTarget.r][dropTarget.c];
-  if (canMerge(a, b)) {                                                  // 合成（含无尽模式升星）
-    G.grid[dropTarget.r][dropTarget.c] = mergeInto(a);
-    G.grid[src.r][src.c] = null;
-    showMsg('合成！' + unitName(G.grid[dropTarget.r][dropTarget.c]));
-  } else {                                                              // 移动 / 交换
-    G.grid[dropTarget.r][dropTarget.c] = a; G.grid[src.r][src.c] = b || null;
+  // 其余一律按"点选"处理：选中 / 再点移动 / 换位 / 合成
+  const cell = nearestCell(dragDown.x, dragDown.y) || src;
+  const prev = G.selCell;
+  if (prev && (prev.r !== cell.r || prev.c !== cell.c)) {
+    const a = G.grid[prev.r][prev.c], b = G.grid[cell.r][cell.c];
+    if (a && canMerge(a, b)) {                                     // 点两个相同兵种 = 合成
+      G.grid[cell.r][cell.c] = mergeInto(a);
+      G.grid[prev.r][prev.c] = null;
+      showMsg('合成！' + unitName(G.grid[cell.r][cell.c]));
+    } else if (a) {                                                // 点别的格子 = 移动 / 换位
+      G.grid[cell.r][cell.c] = a; G.grid[prev.r][prev.c] = b || null;
+    }
+    G.selCell = null;
+  } else if (prev && prev.r === cell.r && prev.c === cell.c) {
+    G.selCell = null;                                              // 再点一次自己 = 取消选中
+  } else {
+    G.selCell = G.grid[cell.r][cell.c] ? cell : null;              // 点棋子 = 选中
   }
-  G.selCell = null; dragDown = null;
+  dragDown = null;
 }
 cv.addEventListener('pointerup', e => {
   endPointer(e.clientX - cv.getBoundingClientRect().left, e.clientY - cv.getBoundingClientRect().top, e.clientX, e.clientY);
@@ -324,31 +337,50 @@ document.addEventListener('pointermove', e => {
 }, { passive: false });
 document.addEventListener('pointerup', e => {  if (!handDrag) return;
   const { idx, moved } = handDrag; handDrag = null; ghostHide();
-  if (!moved) { G.selHand = (G.selHand === idx) ? -1 : idx; G.selCell = null; renderHand(); return; }   // 没动 = 点选
-  const u = G.hand[idx]; if (!u) { renderHand(); return; }
-  if (inTrash(e.clientX, e.clientY)) {                       // 卖兵
-    G.mt += sellValue(u);
-    G.hand.splice(idx, 1);
-    if (G.selHand === idx) G.selHand = -1; else if (G.selHand > idx) G.selHand--;
-    showMsg('卖出 +' + sellValue(u) + ' 🍚');
-    renderHand(); updateTop(); return;
-  }
-  const rect = cv.getBoundingClientRect();
-  const cell = nearestCell(e.clientX - rect.left, e.clientY - rect.top - 30);
-  if (cell) {                                                // 拖上棋盘放置 / 合成（磁吸）
-    G.selHand = idx; placeFromHand(cell); G.selHand = -1; renderHand(); return;
-  }
-  const j = handSlotAt(e.clientX, e.clientY);
-  if (j >= 0 && j !== idx) {                                 // 拖到手牌另一格：合成或换选中
-    if (canMerge(u, G.hand[j])) {
-      G.hand[j] = mergeInto(G.hand[j]);
+  if (moved && inTrash(e.clientX, e.clientY)) {              // 唯一保留的拖拽：拖到垃圾桶卖兵
+    const u = G.hand[idx];
+    if (u) {
+      G.mt += sellValue(u);
       G.hand.splice(idx, 1);
-      if (G.selHand >= idx) G.selHand--;
-      showMsg('手牌合成！' + unitName(G.hand[j]));
-    } else { G.selHand = j; }
-    renderHand(); return;
+      if (G.selHand === idx) G.selHand = -1; else if (G.selHand > idx) G.selHand--;
+      showMsg('卖出 +' + sellValue(u) + ' 🍚');
+      renderHand(); updateTop();
+    }
+    return;
   }
-  renderHand();                                              // 放回原处
+  handTap(idx);                                              // 其余一律按点选处理
+});
+function handTap(idx) {
+  if (!G.hand[idx]) { renderHand(); return; }
+  if (G.selHand >= 0 && G.selHand !== idx && canMerge(G.hand[G.selHand], G.hand[idx])) {
+    G.hand[idx] = mergeInto(G.hand[G.selHand]);
+    G.hand.splice(G.selHand, 1);
+    const ni = G.selHand < idx ? idx - 1 : idx;
+    G.selHand = ni;
+    showMsg('手牌合成！' + unitName(G.hand[ni]));
+  } else {
+    G.selHand = (G.selHand === idx) ? -1 : idx;
+    G.selCell = null;
+  }
+  renderHand();
+}
+// 点选兜底卖兵：选中手牌或棋子后直接点垃圾桶
+trashBtn.addEventListener('click', () => {
+  if (G.over) return;
+  if (G.selHand >= 0 && G.hand[G.selHand]) {
+    const u = G.hand[G.selHand];
+    G.mt += sellValue(u);
+    G.hand.splice(G.selHand, 1); G.selHand = -1;
+    showMsg('卖出 +' + sellValue(u) + ' 🍚');
+    renderHand(); updateTop();
+  } else if (G.selCell && G.grid[G.selCell.r][G.selCell.c]) {
+    const u = G.grid[G.selCell.r][G.selCell.c];
+    G.mt += sellValue(u);
+    G.grid[G.selCell.r][G.selCell.c] = null;
+    G.selCell = null;
+    showMsg('卖出 +' + sellValue(u) + ' 🍚');
+    updateTop();
+  }
 });
 document.addEventListener('pointercancel', () => { handDrag = null; ghostHide(); });
 
