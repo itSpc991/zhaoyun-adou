@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>赵云与阿斗 · 网页复刻版</title>
+<title>赵云与君 · 网页复刻版</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
   html, body { margin: 0; padding: 0; background: #17140f; color: #e8dcc0; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; }
@@ -44,7 +44,7 @@
 <div id="wrap">
   <div id="top">
     <div class="pill" id="mantou">🍚 0</div>
-    <div class="pill" id="hp">斗 ❤❤❤❤❤</div>
+    <div class="pill" id="hp">君 ❤❤❤❤❤</div>
     <div class="pill" id="wavePill">第 1/15 波</div>
     <button class="pill" id="speed" style="font-size:12px;">⏩x1</button>
   </div>
@@ -312,13 +312,13 @@ function draw() {
     ctx.strokeStyle = '#3a3122'; ctx.strokeRect(x+2.5, y+2.5, cellW-5, cellH-5);
     if (G.selCell && G.selCell.r === r && G.selCell.c === c) { ctx.strokeStyle = '#ffd76e'; ctx.lineWidth = 2; ctx.strokeRect(x+2, y+2, cellW-4, cellH-4); ctx.lineWidth = 1; }
   }
-  // 阿斗区
+  // 君的区域
   ctx.fillStyle = '#1a150d'; ctx.fillRect(gridX + cellW*COLS + 4, gridY, W - gridX - cellW*COLS - 12, cellH*ROWS);
   ctx.save(); ctx.translate(adouX, gridY + cellH*ROWS/2); ctx.rotate(-0.1);
   ctx.font = Math.floor(cellW*0.5) + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText('👶', 0, -cellH*0.5);
   ctx.font = '900 ' + Math.floor(cellW*0.28) + 'px sans-serif'; ctx.fillStyle = '#ffd76e';
-  ctx.fillText('阿斗', 0, cellH*0.35);
+  ctx.fillText('君', 0, cellH*0.35);
   ctx.restore();
   // 敌人
   for (const e of G.enemies) {
@@ -367,7 +367,7 @@ function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x+r, y); ctx.arc
 // ============ UI ============
 function updateTop() {
   document.getElementById('mantou').textContent = '🍚 ' + Math.floor(G.mt);
-  document.getElementById('hp').textContent = '斗 ' + '❤'.repeat(Math.max(0, G.hp)) + '🖤'.repeat(Math.max(0, 5 - G.hp));
+  document.getElementById('hp').textContent = '君 ' + '❤'.repeat(Math.max(0, G.hp)) + '🖤'.repeat(Math.max(0, 5 - G.hp));
   document.getElementById('wavePill').textContent = G.endless ? '第 ' + G.wave + ' 波' : '第 ' + Math.max(1, G.wave) + '/' + MAX_WAVE + ' 波';
 }
 function showMsg(m) { G.msg = m; G.msgT = 2; }
@@ -382,11 +382,11 @@ function showPanel(title, desc, btns) {
 function hidePanel() { panel.style.display = 'none'; }
 function gameOver() {
   G.over = true;
-  showPanel('💀 阿斗被抓走了', '守住到第 ' + G.wave + ' 波 · 击杀 ' + G.kills + ' 人<br>调整阵型再来！', [['🔄 再来一局', () => newGame()]]);
+  showPanel('💀 君被抓走了', '守住到第 ' + G.wave + ' 波 · 击杀 ' + G.kills + ' 人<br>调整阵型再来！', [['🔄 再来一局', () => newGame()]]);
 }
 function victory() {
   G.over = true; G.won = true;
-  showPanel('🏆 胜利！救出阿斗！', '通关 15 波 · 击杀 ' + G.kills + ' 人<br>子龙浑身是胆！', [
+  showPanel('🏆 胜利！救出君！', '通关 15 波 · 击杀 ' + G.kills + ' 人<br>子龙浑身是胆！', [
     ['🌊 无尽模式', () => { G.over = false; G.endless = true; G.won = false; hidePanel(); G.interT = 3; }],
     ['🔄 再来一局', () => newGame(), true]]);
 }
