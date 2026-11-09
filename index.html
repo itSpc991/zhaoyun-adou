@@ -44,7 +44,7 @@
 <div id="wrap">
   <div id="top">
     <div class="pill" id="mantou">🍚 0</div>
-    <div class="pill" id="hp">君君 ❤❤❤❤❤</div>
+    <div class="pill" id="hp">君君宝宝 ❤❤❤❤❤</div>
     <div class="pill" id="wavePill">第 1/15 波</div>
     <button class="pill" id="speed" style="font-size:12px;">⏩x1</button>
   </div>
@@ -318,8 +318,8 @@ function draw() {
   ctx.save(); ctx.translate(adouX, gridY + cellH*ROWS/2); ctx.rotate(-0.1);
   ctx.font = Math.floor(cellW*0.5) + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText('👶', 0, -cellH*0.5);
-  ctx.font = '900 ' + Math.floor(cellW*0.22) + 'px sans-serif'; ctx.fillStyle = '#ffd76e';
-  ctx.fillText('君君', 0, cellH*0.35);
+  ctx.font = '900 ' + Math.floor(cellW*0.15) + 'px sans-serif'; ctx.fillStyle = '#ffd76e';
+  ctx.fillText('君君宝宝', 0, cellH*0.35);
   ctx.restore();
   // 敌人（绘制移到棋子之后，漂浮在上层）
 
@@ -377,7 +377,7 @@ function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x+r, y); ctx.arc
 // ============ UI ============
 function updateTop() {
   document.getElementById('mantou').textContent = '🍚 ' + Math.floor(G.mt);
-  document.getElementById('hp').textContent = '君君 ' + '❤'.repeat(Math.max(0, G.hp)) + '🖤'.repeat(Math.max(0, 5 - G.hp));
+  document.getElementById('hp').textContent = '君君宝宝 ' + '❤'.repeat(Math.max(0, G.hp)) + '🖤'.repeat(Math.max(0, 5 - G.hp));
   document.getElementById('wavePill').textContent = G.endless ? '第 ' + G.wave + ' 波' : '第 ' + Math.max(1, G.wave) + '/' + MAX_WAVE + ' 波';
 }
 function showMsg(m) { G.msg = m; G.msgT = 2; }
@@ -392,7 +392,7 @@ function showPanel(title, desc, btns) {
 function hidePanel() { panel.style.display = 'none'; }
 function gameOver() {
   G.over = true;
-  showPanel('💀 君君被抓走了', '守住到第 ' + G.wave + ' 波 · 击杀 ' + G.kills + ' 人<br>调整阵型再来！', [['🔄 再来一局', () => newGame()]]);
+  showPanel('💀 君君宝宝被抓走了', '守住到第 ' + G.wave + ' 波 · 击杀 ' + G.kills + ' 人<br>调整阵型再来！', [['🔄 再来一局', () => newGame()]]);
 }
 function victory() {
   G.over = true; G.won = true;
