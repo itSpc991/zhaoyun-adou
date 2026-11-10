@@ -79,7 +79,7 @@ const LINES = {
 const WUJIANG_LV = 4;
 const MAX_WAVE = 15;
 const SELL = [5, 12, 25, 50];   // 卖兵回收价（按等级），星级另乘 2 / 3
-const PULL_BASE = 10, PULL_STEP = 5;
+const PULL_BASE = 10;   // 征兵固定费用
 const MT_RATE = 2.2;           // 每秒馒头产出
 const ENEMY_TYPES = {
   bing:  { ch:'炮灰小史', color:'#c0392b', hp:30,  spd:13, bounty:3, dmg:1 },
@@ -93,7 +93,7 @@ const ROWS = 5, COLS = 4;
 let G = null;
 function newGame() {
   G = {
-    mt: 30, pullCost: PULL_BASE, wave: 0, waveActive: false, spawnQueue: [], spawnT: 0,
+    mt: 30, wave: 0, waveActive: false, spawnQueue: [], spawnT: 0,
     interT: 3, grid: Array.from({length:ROWS}, () => Array(COLS).fill(null)),
     enemies: [], hp: 5, kills: 0, hand: [], selHand: -1, selCell: null,
     over: false, won: false, speed: 1, endless: false, t: 0, msg: null, msgT: 0,
@@ -150,13 +150,11 @@ function spawnEnemy(type, hpMul) {
 }
 
 // ============ 征兵 & 手牌 ============
-function pullCostNow() { return G.pullCost; }
 function doPull() {
   if (G.over) return;
   if (G.hand.length >= 5) { showMsg('手牌满了，先放置或合成'); return; }
-  const cost = pullCostNow();
-  if (G.mt < cost) { showMsg('馒头不够'); return; }
-  G.mt -= cost; G.pullCost += PULL_STEP;
+  if (G.mt < PULL_BASE) { showMsg('馒头不够'); return; }
+  G.mt -= PULL_BASE;   // 征兵固定 10 馒头，不随次数涨价
   const lines = Object.keys(LINES);
   const line = lines[Math.floor(Math.random() * lines.length)];
   G.hand.push({ line, lv: 1 });
@@ -185,7 +183,7 @@ function renderHand() {
     }
     h.appendChild(s);
   }
-  document.getElementById('btnPull').textContent = '🍚 征兵 (' + pullCostNow() + ')';
+  document.getElementById('btnPull').textContent = '🍚 征兵 (' + PULL_BASE + ')';
   document.getElementById('btnPull').disabled = G.hand.length >= 5;
 }
 
@@ -388,7 +386,6 @@ document.addEventListener('pointercancel', () => {
 function update(dt) {
   if (G.over) return;
   G.t += dt;
-  G.mt += MT_RATE * dt;
   // 出兵
   if (G.waveActive) {
     G.spawnT -= dt;
@@ -398,7 +395,6 @@ function update(dt) {
     }
     if (!G.spawnQueue.length && !G.enemies.length) {   // 本波清空
       G.waveActive = false;
-      G.pullCost = PULL_BASE;
       if (G.wave >= MAX_WAVE && !G.endless) { victory(); return; }
       G.interT = 3;
       showMsg('本波清空！+' + (10 + G.wave*2) + ' 🍚 奖励');
@@ -577,7 +573,10 @@ document.getElementById('btnPause').addEventListener('click', function () {
 let last = performance.now();
 function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (G && !G.over && !paused) for (let i = 0; i < G.speed; i++) update(dt);
+  if (G && !G.over && !paused) {
+    G.mt += MT_RATE * dt;   // 馒头按真实时间结算：倍速只加速战斗，不加速馒头产出
+    for (let i = 0; i < G.speed; i++) update(dt);
+  }
   if (G) draw();
   requestAnimationFrame(loop);
 }
