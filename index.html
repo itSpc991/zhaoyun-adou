@@ -123,10 +123,15 @@ function layout() {
 window.addEventListener('resize', layout);
 
 // ============ 敌人 ============
+function waveHpMul(n) {
+  // 普通模式 15 波内线性成长（保可通关）；无尽模式第 16 波起指数增长（约 +32%/波，匹配玩家的无限合成）
+  if (n <= MAX_WAVE) return 1 + (n - 1) * 0.38;
+  return (1 + (MAX_WAVE - 1) * 0.38) * Math.pow(1.32, n - MAX_WAVE);
+}
 function waveComp(n) {
   const list = [];
-  const count = 3 + Math.round(n * 1.6);
-  const hpMul = 1 + (n-1) * 0.38;
+  const count = 3 + Math.round(n * 1.6);          // 数量随波次持续增加
+  const hpMul = waveHpMul(n);
   for (let i = 0; i < count; i++) {
     let t = 'bing';
     const r = Math.random();
@@ -134,7 +139,7 @@ function waveComp(n) {
     if (n >= 4 && r >= 0.3 && r < 0.5) t = 'dun';
     list.push({ type: t, hpMul });
   }
-  if (n % 5 === 0) list.push({ type: 'boss', hpMul: 1 + (n-1) * 0.3 });
+  if (n % 5 === 0) list.push({ type: 'boss', hpMul });   // 敌将与小兵同一成长曲线
   return list;
 }
 function startWave() {
