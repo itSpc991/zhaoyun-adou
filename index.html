@@ -124,9 +124,9 @@ window.addEventListener('resize', layout);
 
 // ============ 敌人 ============
 function waveHpMul(n) {
-  // 普通模式 15 波内线性成长（保可通关）；无尽模式第 16 波起指数增长（约 +32%/波，匹配玩家的无限合成）
+  // 普通模式 15 波内线性成长（保可通关）；无尽模式从第 16 波起缓慢爬坡（约 +10%/波，Lv7 阵容可推进到 40~50 波）
   if (n <= MAX_WAVE) return 1 + (n - 1) * 0.38;
-  return (1 + (MAX_WAVE - 1) * 0.38) * Math.pow(1.32, n - MAX_WAVE);
+  return (1 + (MAX_WAVE - 1) * 0.38) * Math.pow(1.10, n - MAX_WAVE);
 }
 function waveComp(n) {
   const list = [];
@@ -156,7 +156,7 @@ function spawnEnemy(type, hpMul) {
 
 // ============ 征兵 & 手牌 ============
 function doPull() {
-  if (G.over) return;
+  if (G.over || paused) return;   // 暂停时禁止征兵
   if (G.hand.length >= 5) { showMsg('手牌满了，先放置或合成'); return; }
   if (G.mt < PULL_BASE) { showMsg('馒头不够'); return; }
   G.mt -= PULL_BASE;   // 征兵固定 10 馒头，不随次数涨价
@@ -213,7 +213,7 @@ document.addEventListener('touchmove', e => { if (boardDrag || handDrag) e.preve
 
 // ---- 棋盘拖拽：棋子中心永远 = 手指位置，指哪落哪 ----
 cv.addEventListener('pointerdown', e => {
-  if (G.over || boardDrag || handDrag) return;
+  if (G.over || paused || boardDrag || handDrag) return;   // 暂停时禁止一切棋盘操作
   try { cv.setPointerCapture(e.pointerId); } catch (_) {}   // 拖出画布（到垃圾桶）也能收到 pointerup
   const rect = cv.getBoundingClientRect();
   const px = e.clientX - rect.left, py = e.clientY - rect.top;
@@ -333,7 +333,7 @@ function handSlotAt(x, y) {
   return -1;
 }
 handEl.addEventListener('pointerdown', e => {
-  if (G.over || boardDrag || handDrag) return;
+  if (G.over || paused || boardDrag || handDrag) return;   // 暂停时禁止一切手牌操作
   const slot = e.target.closest('.slot'); if (!slot) return;
   const idx = Array.prototype.indexOf.call(handEl.children, slot);
   if (!G.hand[idx]) return;
@@ -524,7 +524,7 @@ function draw() {
     ctx.fillStyle = '#ffd76e'; ctx.font = '900 22px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('⏸ 已暂停', W/2, H/2 - 12);
     ctx.fillStyle = '#c9b98a'; ctx.font = '13px sans-serif';
-    ctx.fillText('可以趁现在调整棋盘布局，点右上角 ▶️ 继续', W/2, H/2 + 18);
+    ctx.fillText('战场已冻结，暂停中无法操作，点右上角 ▶️ 继续', W/2, H/2 + 18);
   }
   // 波次提示
   if (G.msg && G.msgT > 0) {
@@ -564,8 +564,9 @@ function victory() {
     ['🔄 再来一局', () => newGame(), true]]);
 }
 document.getElementById('btnPull').addEventListener('click', doPull);
-document.getElementById('btnRestart').addEventListener('click', () => newGame());
+document.getElementById('btnRestart').addEventListener('click', () => { if (!paused) newGame(); });
 document.getElementById('speed').addEventListener('click', function () {
+  if (paused) return;   // 暂停时倍速锁定
   G.speed = G.speed === 1 ? 2 : (G.speed === 2 ? 3 : 1);
   this.textContent = '⏩x' + G.speed;
 });
