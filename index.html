@@ -124,9 +124,9 @@ window.addEventListener('resize', layout);
 
 // ============ 敌人 ============
 function waveHpMul(n) {
-  // 普通模式 15 波内线性成长（保可通关）；无尽模式从第 16 波起缓慢爬坡（约 +10%/波，Lv7 阵容可推进到 40~50 波）
+  // 普通模式 15 波内线性成长（保可通关）；无尽模式从第 16 波起缓慢爬坡（约 +6%/波，Lv7 阵容可打穿第 30 波敌将）
   if (n <= MAX_WAVE) return 1 + (n - 1) * 0.38;
-  return (1 + (MAX_WAVE - 1) * 0.38) * Math.pow(1.10, n - MAX_WAVE);
+  return (1 + (MAX_WAVE - 1) * 0.38) * Math.pow(1.06, n - MAX_WAVE);
 }
 function waveComp(n) {
   const list = [];
