@@ -420,29 +420,30 @@ function update(dt) {
     if (u.flash > 0) u.flash -= dt;
     u.cd = (u.cd || 0) - dt; if (u.cd > 0) continue;
     const L = LINES[u.line], cx = cellCenter(r, c).x;
+    const ti = Math.min(u.lv, WUJIANG_LV) - 1;   // Lv5+ 沿用武将级的射程/间隔/AOE 参数
     const inRow = G.enemies.filter(e => e.row === r && e.x < cx + cellW*0.4);
     if (!inRow.length) continue;
-    let rangePx = L.range[u.lv-1] * cellW;
+    let rangePx = L.range[ti] * cellW;
     let targets;
     if (L.kind === 'melee') {
       targets = inRow.filter(e => cx - e.x <= rangePx + cellW*0.4);
-      if (L.aoe[u.lv-1] > 0) {   // 关羽：命中范围内 AOE
-        const hit = targets.filter(e => cx - e.x <= rangePx + L.aoe[u.lv-1]*cellW);
-        if (hit.length) { targets.forEach(e => damage(e, unitAtk(u))); u.cd = L.rate[u.lv-1]; u.flash = 0.15; }
-      } else if (targets.length) { damage(targets[0], L.atk[u.lv-1]); u.cd = L.rate[u.lv-1]; u.flash = 0.12; }
-    } else if (L.kind === 'ranged') {          // 弓/黄忠：整行最前（最靠右）
+      if (L.aoe[ti] > 0) {   // 苗苗：命中范围内 AOE
+        const hit = targets.filter(e => cx - e.x <= rangePx + L.aoe[ti]*cellW);
+        if (hit.length) { targets.forEach(e => damage(e, unitAtk(u))); u.cd = L.rate[ti]; u.flash = 0.15; }
+      } else if (targets.length) { damage(targets[0], unitAtk(u)); u.cd = L.rate[ti]; u.flash = 0.12; }
+    } else if (L.kind === 'ranged') {          // 弓/菲菲：打最前（最靠右），武将全行
       inRow.sort((a,b) => b.x - a.x);
-      if (L.aoe[u.lv-1] > 0 || u.lv === WUJIANG_LV) inRow.forEach(e => damage(e, unitAtk(u)));  // 黄忠打全行
+      if (u.lv >= WUJIANG_LV) inRow.forEach(e => damage(e, unitAtk(u)));  // 菲菲全行齐射
       else damage(inRow[0], unitAtk(u));
-      u.cd = L.rate[u.lv-1]; u.flash = 0.12;
-    } else {                                   // 戟/赵云：穿透，从近到远打 N 个
+      u.cd = L.rate[ti]; u.flash = 0.12;
+    } else {                                   // 戟/小惠：穿透
       inRow.sort((a,b) => b.x - a.x);
-      const n = u.lv === WUJIANG_LV ? 99 : 3;
+      const n = u.lv >= WUJIANG_LV ? 99 : 3;   // 武将穿透无数量上限
       let hitAny = false, cnt = 0;
       for (const e of inRow) {
-        if (cx - e.x <= rangePx || u.lv === WUJIANG_LV) { damage(e, unitAtk(u)); hitAny = true; if (++cnt >= n && u.lv !== WUJIANG_LV) break; }
+        if (cx - e.x <= rangePx || u.lv >= WUJIANG_LV) { damage(e, unitAtk(u)); hitAny = true; if (++cnt >= n && u.lv < WUJIANG_LV) break; }
       }
-      if (hitAny) { u.cd = L.rate[u.lv-1]; u.flash = 0.12; }
+      if (hitAny) { u.cd = L.rate[ti]; u.flash = 0.12; }
     }
   }
   updateTop();
