@@ -61,7 +61,7 @@
       <button id="btnRestart">🔄 重开</button>
       <button id="btnTrash" title="把兵拖到这里卖掉">🗑️</button>
     </div>
-    <div id="hint">按住拖动：拖上棋盘放置，拖到相同兵种合成，拖回下方手牌收回，拖到 🗑️ 卖兵；棋子中心指哪落哪，落点格高亮</div>
+    <div id="hint">按住拖动：拖上棋盘放置，拖到相同兵种合成，拖回下方手牌收回，拖到 🗑️ 卖兵；无尽模式可无限合成升星叠属性</div>
   </div>
 </div>
 <div id="ghost"></div>
@@ -163,13 +163,14 @@ function doPull() {
 }
 // ============ 合成 / 星级 / 卖兵 公共逻辑 ============
 function canMerge(a, b) {
-  return !!a && !!b && a.line === b.line && a.lv === b.lv && (a.star||1) === (b.star||1)
-      && (a.lv < WUJIANG_LV || (G.endless && (a.star||1) < 3));   // 无尽模式 Lv4 可升星，三星封顶
+  return !!a && !!b && a.line === b.line && a.lv === b.lv
+      && (a.lv < WUJIANG_LV || G.endless);   // 无尽模式不设上限：Lv4 以上也能一直合成
 }
-function mergeInto(a) { return a.lv < WUJIANG_LV ? { line: a.line, lv: a.lv + 1, flash: 0.4 } : { line: a.line, lv: WUJIANG_LV, star: (a.star||1) + 1, flash: 0.4 }; }
-function unitName(u) { return LINES[u.line].tiers[u.lv-1] + (u.lv >= WUJIANG_LV ? ((u.star||1) === 1 ? '一星' : (u.star||1) === 2 ? '二星' : '三星') : ''); }
-function sellValue(u) { return Math.round(SELL[u.lv-1] * (u.star === 2 ? 2 : u.star === 3 ? 3 : 1)); }
-function unitAtk(u) { return Math.round(LINES[u.line].atk[u.lv-1] * (u.star === 2 ? 1.6 : u.star === 3 ? 2.5 : 1)); }
+function mergeInto(a) { return { line: a.line, lv: a.lv + 1, flash: 0.4 }; }
+function cnNum(n) { const d = ['零','一','二','三','四','五','六','七','八','九']; if (n <= 10) return ['十','一','二','三','四','五','六','七','八','九','十'][n]; if (n < 20) return '十' + d[n%10]; return d[Math.floor(n/10)] + '十' + (n%10 ? d[n%10] : ''); }
+function unitName(u) { return LINES[u.line].tiers[Math.min(u.lv, WUJIANG_LV) - 1] + 'Lv' + u.lv; }
+function sellValue(u) { return Math.round(SELL[Math.min(u.lv, WUJIANG_LV)-1] * (u.lv > WUJIANG_LV ? Math.pow(1.5, u.lv - WUJIANG_LV) : 1)); }
+function unitAtk(u) { const b = LINES[u.line].atk[Math.min(u.lv, WUJIANG_LV) - 1]; return Math.round(u.lv > WUJIANG_LV ? b * Math.pow(1.5, u.lv - WUJIANG_LV) : b); }
 function renderHand() {
   const h = document.getElementById('hand'); h.innerHTML = '';
   for (let i = 0; i < 5; i++) {
@@ -178,8 +179,7 @@ function renderHand() {
     if (u) {
       const L = LINES[u.line];
       s.textContent = L.tiers[u.lv-1]; s.style.color = L.color;
-      const stars = u.lv >= WUJIANG_LV ? (u.star || 1) : 0;
-      s.innerHTML = L.tiers[u.lv-1] + (stars >= 1 ? '<span class="lv">' + '★'.repeat(stars) + '</span>' : (u.lv > 1 ? '<span class="lv">Lv' + u.lv + '</span>' : ''));
+      s.innerHTML = L.tiers[Math.min(u.lv, WUJIANG_LV) - 1] + '<span class="lv">Lv' + u.lv + '</span>';
     }
     h.appendChild(s);
   }
@@ -300,7 +300,7 @@ function placeUnit(cell, u) {   // 把手牌碎片放到棋盘：成功返回 tr
     return true;
   }
   if (!cur) {
-    G.grid[cell.r][cell.c] = { line: u.line, lv: u.lv, star: u.star, flash: 0.3 };
+    G.grid[cell.r][cell.c] = { line: u.line, lv: u.lv, flash: 0.3 };
     return true;
   }
   return false;
@@ -312,8 +312,7 @@ const trashBtn = document.getElementById('btnTrash');
 const ghostEl = document.getElementById('ghost');
 function ghostSetup(u) {
   const L = LINES[u.line];
-  const stars = u.lv >= WUJIANG_LV ? (u.star || 1) : 0;
-  ghostEl.textContent = L.tiers[u.lv-1] + (stars >= 1 ? '★'.repeat(stars) : '');
+  ghostEl.textContent = L.tiers[Math.min(u.lv, WUJIANG_LV) - 1] + 'Lv' + u.lv;
   ghostEl.style.background = L.color;
   ghostEl.style.display = 'flex';
   trashBtn.classList.add('hot');
@@ -487,11 +486,10 @@ function draw() {
     roundRect(x - s/2, y - s/2, s, s, 8); ctx.fill();
     ctx.fillStyle = '#1c160c'; ctx.font = '900 ' + Math.floor(s*0.42) + 'px "PingFang SC","Microsoft YaHei",sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(L.tiers[u.lv-1], x, y - s*0.08);
-    const stars = u.lv >= WUJIANG_LV ? (u.star || 1) : 0;   // 武将显示星级：一星★ 二星★★ 三星★★★
-    if (stars >= 1) { ctx.fillStyle = '#ffd76e'; ctx.font = 'bold ' + Math.floor(s*0.24) + 'px sans-serif'; ctx.fillText('★'.repeat(stars), x, y + s*0.32); }
-    else if (u.lv > 1) { ctx.font = 'bold ' + Math.floor(s*0.22) + 'px sans-serif'; ctx.fillText('Lv' + u.lv, x, y + s*0.32); }
-    if (u.lv === WUJIANG_LV) { ctx.strokeStyle = '#ffd76e'; ctx.lineWidth = 2; roundRect(x - s/2, y - s/2, s, s, 8); ctx.stroke(); ctx.lineWidth = 1; }
+    ctx.fillText(L.tiers[Math.min(u.lv, WUJIANG_LV) - 1], x, y - s*0.08);
+    if (u.lv >= WUJIANG_LV) { ctx.fillStyle = '#ffd76e'; }   // 武将名字用金色
+    ctx.font = 'bold ' + Math.floor(s*0.22) + 'px sans-serif'; ctx.fillText('Lv' + u.lv, x, y + s*0.32);
+    if (u.lv >= WUJIANG_LV) { ctx.strokeStyle = '#ffd76e'; ctx.lineWidth = 2; roundRect(x - s/2, y - s/2, s, s, 8); ctx.stroke(); ctx.lineWidth = 1; }
   }
   // 敌人：透明背景，文字带描边，漂浮在我方棋子上面经过
   for (const e of G.enemies) {
