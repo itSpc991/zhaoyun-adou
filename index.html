@@ -51,6 +51,7 @@
     <div class="pill" id="mantou">🍚 0</div>
     <div class="pill" id="hp">君君宝宝 ❤❤❤❤❤</div>
     <div class="pill" id="wavePill">第 1/15 波</div>
+    <button class="pill" id="btnPause" style="font-size:12px;">⏸</button>
     <button class="pill" id="speed" style="font-size:12px;">⏩x1</button>
   </div>
   <div id="field"><canvas id="cv"></canvas></div>
@@ -98,6 +99,7 @@ function newGame() {
     over: false, won: false, speed: 1, endless: false, t: 0, msg: null, msgT: 0,
   };
   renderHand(); updateTop(); hidePanel();
+  paused = false; document.getElementById('btnPause').textContent = '⏸';
   window.G = G;
 }
 
@@ -199,7 +201,7 @@ function nearestCell(px, py) {
   const cx = gridX + c*cellW + cellW/2, cy = gridY + r*cellH + cellH/2;
   return Math.hypot(px - cx, py - cy) <= Math.min(cellW, cellH) * 0.9 ? { r, c } : null;
 }
-let boardDrag = null, handDrag = null, dragXY = null, dropCell = null, lastClient = null;
+let boardDrag = null, handDrag = null, dragXY = null, dropCell = null, lastClient = null, paused = false;
 function cellCenter(r, c) { return { x: gridX + c*cellW + cellW/2, y: gridY + r*cellH + cellH/2 }; }
 
 const TAP_SLOP = 14;   // 位移小于此值视为"点了一下"（放回原处）
@@ -514,6 +516,14 @@ function draw() {
     ctx.lineWidth = 1;
   }
   // 拖动中的棋子由悬浮 DOM 图层（#ghost）显示，拖到页面任何位置都可见
+  // 暂停遮罩
+  if (paused && !G.over) {
+    ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#ffd76e'; ctx.font = '900 22px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('⏸ 已暂停', W/2, H/2 - 12);
+    ctx.fillStyle = '#c9b98a'; ctx.font = '13px sans-serif';
+    ctx.fillText('可以趁现在调整棋盘布局，点右上角 ▶️ 继续', W/2, H/2 + 18);
+  }
   // 波次提示
   if (G.msg && G.msgT > 0) {
     G.msgT -= 0.016;
@@ -557,12 +567,17 @@ document.getElementById('speed').addEventListener('click', function () {
   G.speed = G.speed === 1 ? 2 : (G.speed === 2 ? 3 : 1);
   this.textContent = '⏩x' + G.speed;
 });
+document.getElementById('btnPause').addEventListener('click', function () {
+  if (G.over) return;
+  paused = !paused;
+  this.textContent = paused ? '▶️' : '⏸';
+});
 
 // ============ 主循环 ============
 let last = performance.now();
 function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (G && !G.over) for (let i = 0; i < G.speed; i++) update(dt);
+  if (G && !G.over && !paused) for (let i = 0; i < G.speed; i++) update(dt);
   if (G) draw();
   requestAnimationFrame(loop);
 }
