@@ -59,7 +59,6 @@
     <div id="hand"></div>
     <div id="btnRow">
       <button id="btnPull">🍚 征兵 (10)</button>
-      <button id="btnRestart">🔄 重开</button>
       <button id="btnTrash" title="把兵拖到这里卖掉">🗑️</button>
     </div>
     <div id="hint">按住拖动：拖上棋盘放置，拖到相同兵种合成，拖回下方手牌收回，拖到 🗑️ 卖兵；无尽模式可无限合成升星叠属性</div>
@@ -564,7 +563,6 @@ function victory() {
     ['🔄 再来一局', () => newGame(), true]]);
 }
 document.getElementById('btnPull').addEventListener('click', doPull);
-document.getElementById('btnRestart').addEventListener('click', () => { if (!paused) newGame(); });
 document.getElementById('speed').addEventListener('click', function () {
   if (paused) return;   // 暂停时倍速锁定
   G.speed = G.speed === 1 ? 2 : (G.speed === 2 ? 3 : 1);
